@@ -1,0 +1,31 @@
+name: chess_client
+description: Jeu d'échecs multiplateforme — Flutter
+publish_to: none
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Gestion d'état
+  flutter_riverpod: ^2.5.1
+  riverpod: ^2.5.1
+
+  # Réseau
+  http: ^1.2.1
+  socket_io_client: ^2.0.3+1
+
+  # UI
+  google_fonts: ^6.2.1
+  gap: ^3.0.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
