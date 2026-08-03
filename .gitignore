@@ -1,0 +1,126 @@
+# Operating system files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Icon?
+Desktop.ini
+$RECYCLE.BIN/
+
+# Visual Studio / IDEs
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.opendb
+*.opensdf
+*.cache
+*.dbmdl
+*.VC.db
+*.idea/
+*.vscode/
+*.log
+
+# Build outputs
+bin/
+obj/
+[Bb]uild/
+[Bb]uilds/
+[Dd]ebug*/
+[Rr]elease*/
+x64/
+x86/
+
+# Package managers
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+pnpm-lock.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+env/
+venv/
+
+# Unity
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Mm]emoryCaptures/
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+*.pidb.meta
+sysinfo.txt
+*.apk
+*.aab
+
+# JetBrains Rider
+.idea/
+.idea/*
+*.sln.iml
+
+# Misc
+*.swp
+*.swo
+*.bak
+*.tmp
+*.temp
+*.orig
+*.rej
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+# Dotenv
+.env
+.env.*
+
+# OneDrive
+~$*
+
+# Ignore generated files
+*.generated.cs
+*.dll
+*.exe
+*.cache
+*.class
+
+# Ignore thumbs and metadata
+*.DS_Store
+*.AppleDouble
+*.LSOverride
+
+# Ignore archives
+*.7z
+*.zip
+*.rar
+*.tar.gz
+*.tgz
+*.bz2
+*.gz
