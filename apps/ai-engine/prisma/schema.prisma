@@ -1,0 +1,253 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+  APPLE
+  FACEBOOK
+}
+
+enum UserRole {
+  PLAYER
+  ADMIN
+}
+
+enum TimeControlCategory {
+  BULLET
+  BLITZ
+  RAPID
+  CLASSICAL
+}
+
+enum PlayerType {
+  HUMAN
+  AI
+}
+
+enum GameMode {
+  LOCAL
+  AI
+  PRIVATE
+  MATCHMAKING
+}
+
+enum GameStatus {
+  WAITING
+  ONGOING
+  FINISHED
+  ABORTED
+}
+
+enum GameResult {
+  WHITE_WIN
+  BLACK_WIN
+  DRAW
+  ABORTED
+}
+
+enum ResultReason {
+  CHECKMATE
+  RESIGNATION
+  TIMEOUT
+  DRAW_AGREEMENT
+  STALEMATE
+  THREEFOLD_REPETITION
+  FIFTY_MOVE_RULE
+  INSUFFICIENT_MATERIAL
+  ABANDONED
+}
+
+enum Color {
+  WHITE
+  BLACK
+}
+
+enum NotificationType {
+  GAME_INVITE
+  YOUR_TURN
+  GAME_ENDED
+  SYSTEM
+}
+
+enum QueueStatus {
+  WAITING
+  MATCHED
+  CANCELLED
+}
+
+model User {
+  id           String       @id @default(uuid())
+  email        String?      @unique
+  passwordHash String?
+  displayName  String
+  avatarUrl    String?
+  country      String?
+  role         UserRole     @default(PLAYER)
+  authProvider AuthProvider @default(LOCAL)
+  providerId   String?
+  isActive     Boolean      @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  refreshTokens      RefreshToken[]
+  ratings            Rating[]
+  statistics         UserStatistics?
+  gamesAsWhite       Game[]                  @relation("WhitePlayer")
+  gamesAsBlack       Game[]                  @relation("BlackPlayer")
+  notifications      Notification[]
+  matchmakingEntries MatchmakingQueueEntry[]
+
+  @@unique([authProvider, providerId])
+  @@index([email])
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  userAgent String?
+  ipAddress String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model Rating {
+  id          String               @id @default(uuid())
+  userId      String
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  timeControl TimeControlCategory
+  elo         Int                  @default(1200)
+  peakElo     Int                  @default(1200)
+  gamesPlayed Int                  @default(0)
+  wins        Int                  @default(0)
+  losses      Int                  @default(0)
+  draws       Int                  @default(0)
+  updatedAt   DateTime             @updatedAt
+
+  @@unique([userId, timeControl])
+  @@index([timeControl, elo])
+}
+
+model UserStatistics {
+  userId           String   @id
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  totalGames       Int      @default(0)
+  totalWins        Int      @default(0)
+  totalLosses      Int      @default(0)
+  totalDraws       Int      @default(0)
+  currentStreak    Int      @default(0)
+  bestWinStreak    Int      @default(0)
+  totalPlayTimeSec Int      @default(0)
+  updatedAt        DateTime @updatedAt
+}
+
+model Game {
+  id                 String               @id @default(uuid())
+  mode               GameMode
+  timeControl        TimeControlCategory
+  initialTimeSeconds Int
+  incrementSeconds   Int                  @default(0)
+
+  whitePlayerId   String?
+  whitePlayer     User?      @relation("WhitePlayer", fields: [whitePlayerId], references: [id])
+  whitePlayerType PlayerType
+  blackPlayerId   String?
+  blackPlayer     User?      @relation("BlackPlayer", fields: [blackPlayerId], references: [id])
+  blackPlayerType PlayerType
+
+  aiLevel     Int?
+  aiTargetElo Int?
+
+  status       GameStatus    @default(WAITING)
+  result       GameResult?
+  resultReason ResultReason?
+
+  initialFen String  @default("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
+  currentFen String  @default("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
+  pgn        String?
+
+  roomCode String? @unique
+
+  whiteTimeRemainingMs Int
+  blackTimeRemainingMs Int
+
+  createdAt DateTime  @default(now())
+  startedAt DateTime?
+  endedAt   DateTime?
+
+  moves    Move[]
+  analysis GameAnalysis?
+
+  @@index([status])
+  @@index([roomCode])
+}
+
+model Move {
+  id               String   @id @default(uuid())
+  gameId           String
+  game             Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  ply              Int
+  player           Color
+  san              String
+  uci              String
+  fenAfter         String
+  isCheck          Boolean  @default(false)
+  isCheckmate      Boolean  @default(false)
+  isCapture        Boolean  @default(false)
+  isPromotion      Boolean  @default(false)
+  promotionPiece   String?
+  timeSpentMs      Int
+  clockRemainingMs Int
+  createdAt        DateTime @default(now())
+
+  @@unique([gameId, ply])
+  @@index([gameId])
+}
+
+model GameAnalysis {
+  id            String   @id @default(uuid())
+  gameId        String   @unique
+  game          Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  engineDepth   Int
+  accuracyWhite Float
+  accuracyBlack Float
+  evaluations   Json
+  createdAt     DateTime @default(now())
+}
+
+model MatchmakingQueueEntry {
+  id          String      @id @default(uuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  timeControl TimeControlCategory
+  eloSnapshot Int
+  status      QueueStatus @default(WAITING)
+  queuedAt    DateTime    @default(now())
+  matchedAt   DateTime?
+
+  @@index([timeControl, status])
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  payload   Json
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId, isRead])
+}

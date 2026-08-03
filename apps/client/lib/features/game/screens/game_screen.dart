@@ -7,8 +7,6 @@ import '../../board/widgets/chess_piece.dart';
 import '../models/game_state.dart';
 import '../providers/game_provider.dart';
 
-/// Écran principal d'une partie d'échecs.
-/// Affiche : info adversaire, plateau, info joueur, historique des coups.
 class GameScreen extends ConsumerStatefulWidget {
   const GameScreen({super.key});
 
@@ -24,27 +22,38 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
-        title: const Text('Échecs'),
+        title: Text(_appTitle(asyncState.valueOrNull)),
         actions: [
           IconButton(
             icon: const Icon(Icons.flip),
-            tooltip: 'Retourner le plateau',
+            tooltip: 'Retourner',
             onPressed: () => ref.read(gameProvider.notifier).flipBoard(),
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (v) => _handleMenu(v, asyncState.valueOrNull),
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'export', child: Text('Copier le PGN')),
+            ],
           ),
         ],
       ),
       body: asyncState.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-          child: Text('Erreur : $e', style: const TextStyle(color: Colors.red)),
-        ),
+        error: (e, _) =>
+            Center(child: Text('Erreur : $e', style: const TextStyle(color: Colors.red))),
         data: (state) => _buildGameView(context, state),
       ),
     );
   }
 
+  String _appTitle(GameState? state) {
+    if (state == null) return 'Échecs';
+    if (state.isAiMode) return 'Contre l\'IA — Niveau ${state.aiLevel}';
+    return 'Partie locale';
+  }
+
   Widget _buildGameView(BuildContext context, GameState state) {
-    // Afficher le sélecteur de promotion si en attente
     if (state.pendingPromotion != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         showDialog<void>(
@@ -58,9 +67,9 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       });
     }
 
-    // Afficher une erreur temporaire
     if (state.error != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(state.error!),
@@ -68,11 +77,9 @@ class _GameScreenState extends ConsumerState<GameScreen> {
             duration: const Duration(seconds: 2),
           ),
         );
-        ref.read(gameProvider.notifier); // Le notifier efface l'erreur
       });
     }
 
-    // Afficher le résultat
     if (state.isOver) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _showResultDialog(context, state);
@@ -80,17 +87,43 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     }
 
     final notifier = ref.read(gameProvider.notifier);
-    final flipped  = state.isFlipped;
-
-    // Trouver le roi en échec
+    final flipped = state.isFlipped;
     final inCheckSquare = _findKingInCheck(state);
 
     return SafeArea(
       child: Column(
         children: [
-          // ─── Info joueur du haut ────────────────────────────────────────
+          // ─── Bandeau "IA réfléchit" ──────────────────────────────────────
+          if (state.isAiThinking)
+            Container(
+              color: AppTheme.primary.withOpacity(0.4),
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white70,
+                    ),
+                  ),
+                  Gap(10),
+                  Text(
+                    'L\'IA réfléchit…',
+                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                ],
+              ),
+            ),
+
+          // ─── Joueur du haut ─────────────────────────────────────────────
           _PlayerInfoBar(
             label: flipped ? 'Blancs' : 'Noirs',
+            sublabel: flipped
+                ? null
+                : (state.isAiMode ? 'IA niv. ${state.aiLevel}' : null),
             timeMs: flipped ? state.whiteTimeMs : state.blackTimeMs,
             isActive: flipped
                 ? state.activeColor == 'w'
@@ -116,45 +149,44 @@ class _GameScreenState extends ConsumerState<GameScreen> {
             ),
           ),
 
-          // ─── Info joueur du bas ─────────────────────────────────────────
+          // ─── Joueur du bas ───────────────────────────────────────────────
           _PlayerInfoBar(
             label: flipped ? 'Noirs' : 'Blancs',
+            sublabel: flipped
+                ? (state.isAiMode ? 'IA niv. ${state.aiLevel}' : null)
+                : null,
             timeMs: flipped ? state.blackTimeMs : state.whiteTimeMs,
             isActive: flipped
                 ? state.activeColor == 'b'
                 : state.activeColor == 'w',
           ),
 
-          // ─── Historique des coups ────────────────────────────────────────
+          // ─── Historique ──────────────────────────────────────────────────
           if (state.moves.isNotEmpty) _MoveHistory(moves: state.moves),
 
-          // ─── Boutons d'action ────────────────────────────────────────────
-          if (!state.isOver)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.flag, size: 18),
-                      label: const Text('Abandonner'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppTheme.accent,
-                        side: const BorderSide(color: AppTheme.accent),
-                      ),
-                      onPressed: () => _confirmResign(context, state),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          // ─── Actions ─────────────────────────────────────────────────────
+          if (!state.isOver && !state.isAiThinking)
+            _ActionBar(state: state, notifier: notifier),
         ],
       ),
     );
   }
 
+  Future<void> _handleMenu(String action, GameState? state) async {
+    if (action == 'export') {
+      await ref.read(gameProvider.notifier).exportPgn();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('PGN copié dans le presse-papier'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
   String? _findKingInCheck(GameState state) {
-    // Si le dernier coup a produit un échec, trouver le roi du joueur courant
     if (state.lastMove?.isCheck ?? false) {
       final kingCode = '${state.activeColor}K';
       return state.position.pieces.entries
@@ -167,53 +199,42 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     return null;
   }
 
-  Future<void> _confirmResign(BuildContext context, GameState state) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: AppTheme.surface,
-        title: const Text('Abandonner ?',
-            style: TextStyle(color: Colors.white)),
-        content: const Text(
-          'Votre adversaire remportera la partie.',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Annuler'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Abandonner'),
-          ),
-        ],
-      ),
-    );
-    if (confirm == true && mounted) {
-      ref.read(gameProvider.notifier).resign(
-            state.activeColor == 'w' ? 'white' : 'black',
-          );
-    }
-  }
-
-  void _showResultDialog(BuildContext context, GameState state) {
+  Future<void> _showResultDialog(BuildContext context, GameState state) async {
     if (!mounted) return;
-    final msg = _resultMessage(state);
-    showDialog<void>(
+    await showDialog<void>(
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: AppTheme.surface,
-        title: Text(msg, style: const TextStyle(color: Colors.white)),
-        content: Text(
-          _reasonMessage(state.resultReason),
-          style: const TextStyle(color: Colors.white70),
+        title: Text(_resultMessage(state),
+            style: const TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(_reasonMessage(state.resultReason),
+                style: const TextStyle(color: Colors.white70)),
+            const Gap(16),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.copy, size: 16),
+              label: const Text('Copier PGN'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                await ref.read(gameProvider.notifier).exportPgn();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context)
+                      .showSnackBar(const SnackBar(content: Text('PGN copié')));
+                }
+              },
+            ),
+          ],
         ),
         actions: [
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              Navigator.pop(context); // revenir à l'accueil
+              Navigator.pop(context);
             },
             child: const Text('Accueil'),
           ),
@@ -222,49 +243,41 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     );
   }
 
-  String _resultMessage(GameState state) {
-    switch (state.result) {
-      case 'WHITE_WIN':
-        return '♔ Les Blancs gagnent !';
-      case 'BLACK_WIN':
-        return '♚ Les Noirs gagnent !';
-      case 'DRAW':
-        return '½-½ Nulle !';
-      default:
-        return 'Partie terminée';
+  String _resultMessage(GameState s) {
+    switch (s.result) {
+      case 'WHITE_WIN': return '♔ Les Blancs gagnent !';
+      case 'BLACK_WIN': return '♚ Les Noirs gagnent !';
+      case 'DRAW':      return '½-½ Nulle !';
+      default:          return 'Partie terminée';
     }
   }
 
-  String _reasonMessage(String? reason) {
-    switch (reason) {
-      case 'CHECKMATE':
-        return 'Échec et mat';
-      case 'RESIGNATION':
-        return 'Abandon';
-      case 'STALEMATE':
-        return 'Pat';
-      case 'THREEFOLD_REPETITION':
-        return 'Triple répétition';
-      case 'FIFTY_MOVE_RULE':
-        return 'Règle des 50 coups';
-      case 'INSUFFICIENT_MATERIAL':
-        return 'Matériel insuffisant';
-      default:
-        return '';
+  String _reasonMessage(String? r) {
+    switch (r) {
+      case 'CHECKMATE':             return 'Échec et mat';
+      case 'RESIGNATION':           return 'Abandon';
+      case 'STALEMATE':             return 'Pat';
+      case 'DRAW_AGREEMENT':        return 'Nulle par accord';
+      case 'THREEFOLD_REPETITION':  return 'Triple répétition';
+      case 'FIFTY_MOVE_RULE':       return 'Règle des 50 coups';
+      case 'INSUFFICIENT_MATERIAL': return 'Matériel insuffisant';
+      default:                      return '';
     }
   }
 }
 
-// ─── Barre d'info joueur ──────────────────────────────────────────────────────
+// ─── Barre de joueur ─────────────────────────────────────────────────────────
 
 class _PlayerInfoBar extends StatelessWidget {
   const _PlayerInfoBar({
     required this.label,
     required this.timeMs,
     required this.isActive,
+    this.sublabel,
   });
 
   final String label;
+  final String? sublabel;
   final int timeMs;
   final bool isActive;
 
@@ -272,12 +285,11 @@ class _PlayerInfoBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final minutes = (timeMs ~/ 60000).toString().padLeft(2, '0');
     final seconds = ((timeMs % 60000) ~/ 1000).toString().padLeft(2, '0');
+    final isLow = timeMs > 0 && timeMs < 30000;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: isActive
-          ? AppTheme.primary.withOpacity(0.3)
-          : Colors.transparent,
+      color: isActive ? AppTheme.primary.withOpacity(0.3) : Colors.transparent,
       child: Row(
         children: [
           Container(
@@ -296,19 +308,31 @@ class _PlayerInfoBar extends StatelessWidget {
           ),
           const Gap(12),
           Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w500,
-                fontSize: 15,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(label,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 15,
+                    )),
+                if (sublabel != null)
+                  Text(sublabel!,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.45),
+                        fontSize: 11,
+                      )),
+              ],
             ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: isActive ? AppTheme.accent : AppTheme.surface,
+              color: isLow
+                  ? AppTheme.accent
+                  : (isActive ? AppTheme.accent : AppTheme.surface),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
@@ -327,7 +351,102 @@ class _PlayerInfoBar extends StatelessWidget {
   }
 }
 
-// ─── Historique des coups ─────────────────────────────────────────────────────
+// ─── Barre d'actions ─────────────────────────────────────────────────────────
+
+class _ActionBar extends ConsumerWidget {
+  const _ActionBar({required this.state, required this.notifier});
+
+  final GameState state;
+  final GameNotifier notifier;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final canUndo = state.moves.isNotEmpty &&
+        !state.isAiMode; // annulation désactivée en mode IA
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+      child: Row(
+        children: [
+          if (canUndo)
+            IconButton(
+              onPressed: () => notifier.undoMove(),
+              icon: const Icon(Icons.undo, color: Colors.white70),
+              tooltip: 'Annuler',
+            ),
+          const Spacer(),
+          if (!state.isAiMode)
+            OutlinedButton(
+              onPressed: () => _confirmDraw(context),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white70,
+                side: const BorderSide(color: Colors.white24),
+              ),
+              child: const Text('½ Nulle'),
+            ),
+          if (!state.isAiMode) const Gap(8),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.flag, size: 16),
+            label: const Text('Abandon'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppTheme.accent,
+              side: const BorderSide(color: AppTheme.accent),
+            ),
+            onPressed: () => _confirmResign(context),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmDraw(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text('Proposer la nulle ?',
+            style: TextStyle(color: Colors.white)),
+        content: const Text('Les deux joueurs acceptent-ils la nulle ?',
+            style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Annuler')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Accepter')),
+        ],
+      ),
+    );
+    if (confirm == true) notifier.acceptDraw();
+  }
+
+  Future<void> _confirmResign(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text('Abandonner ?',
+            style: TextStyle(color: Colors.white)),
+        content: const Text('Votre adversaire remportera la partie.',
+            style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Annuler')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Abandonner')),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      notifier.resign(state.activeColor == 'w' ? 'white' : 'black');
+    }
+  }
+}
+
+// ─── Historique ──────────────────────────────────────────────────────────────
 
 class _MoveHistory extends StatelessWidget {
   const _MoveHistory({required this.moves});
@@ -351,18 +470,19 @@ class _MoveHistory extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text('${i + 1}.',
-                    style: const TextStyle(
-                        color: Colors.white38, fontSize: 13)),
+                    style:
+                        const TextStyle(color: Colors.white38, fontSize: 13)),
                 const Gap(4),
                 Text(white.san as String,
                     style: const TextStyle(
-                        color: Colors.white, fontSize: 13,
+                        color: Colors.white,
+                        fontSize: 13,
                         fontWeight: FontWeight.w500)),
                 if (black != null) ...[
                   const Gap(6),
                   Text(black.san as String,
-                      style: const TextStyle(
-                          color: Colors.white70, fontSize: 13)),
+                      style:
+                          const TextStyle(color: Colors.white70, fontSize: 13)),
                 ],
               ],
             ),

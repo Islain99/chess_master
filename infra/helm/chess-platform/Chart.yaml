@@ -1,0 +1,13 @@
+apiVersion: v2
+name: chess-platform
+description: Jeu d'échecs multiplateforme — NestJS + Flutter
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+maintainers:
+  - name: chess-team
+keywords:
+  - chess
+  - nestjs
+  - flutter
+  - socket.io

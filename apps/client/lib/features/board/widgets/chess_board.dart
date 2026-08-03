@@ -1,17 +1,13 @@
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_theme.dart';
 import '../models/board_position.dart';
 import '../models/chess_move.dart';
 import 'chess_square.dart';
 
 /// Plateau d'échecs interactif 8×8.
 ///
-/// Responsabilités :
-/// - Afficher les 64 cases et les pièces dans la position [position].
-/// - Mettre en évidence la case [selectedSquare], les [legalTargets]
-///   et le dernier coup [lastMove].
-/// - Émettre [onSquareTap] lors d'un tap et [onPieceDrop] lors d'un drag.
-/// - Retourner le plateau quand [flipped] est vrai.
+/// Les coordonnées (a–h, 1–8) sont insérées directement dans les cases
+/// de bordure (coin supérieur-gauche pour les rangées, coin inférieur-droit
+/// pour les colonnes), à la manière de Chess.com — sans modifier le ratio 1:1.
 class ChessBoardWidget extends StatelessWidget {
   const ChessBoardWidget({
     super.key,
@@ -23,7 +19,6 @@ class ChessBoardWidget extends StatelessWidget {
     this.lastMove,
     this.inCheckSquare,
     this.flipped = false,
-    this.showCoordinates = true,
   });
 
   final BoardPosition position;
@@ -34,7 +29,6 @@ class ChessBoardWidget extends StatelessWidget {
   final ChessMove? lastMove;
   final String? inCheckSquare;
   final bool flipped;
-  final bool showCoordinates;
 
   @override
   Widget build(BuildContext context) {
@@ -42,72 +36,33 @@ class ChessBoardWidget extends StatelessWidget {
       aspectRatio: 1,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final size = constraints.maxWidth;
-          final coordWidth = showCoordinates ? 18.0 : 0.0;
-          final boardSize = size - coordWidth;
-          final squareSize = boardSize / 8;
-
-          return Row(
-            children: [
-              // ─── Labels de rangée (1–8) ───────────────────────────────
-              if (showCoordinates)
-                SizedBox(
-                  width: coordWidth,
-                  child: Column(
-                    children: List.generate(8, (i) {
-                      final rank = flipped ? (i + 1) : (8 - i);
-                      return SizedBox(
-                        height: squareSize,
-                        child: Center(
-                          child: Text(
-                            '$rank',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.white.withOpacity(0.5),
-                            ),
-                          ),
-                        ),
-                      );
-                    }),
-                  ),
-                ),
-
-              // ─── Grille 8×8 ───────────────────────────────────────────
-              SizedBox(
-                width: boardSize,
-                height: boardSize,
-                child: Column(
-                  children: [
-                    ...List.generate(8, (rowIdx) {
-                      return Row(
-                        children: List.generate(8, (colIdx) {
-                          final square = _squareAt(rowIdx, colIdx);
-                          return _buildSquare(square, squareSize);
-                        }),
-                      );
-                    }),
-
-                    // ─── Labels de colonne (a–h) ──────────────────────
-                    if (showCoordinates)
-                      SizedBox(
-                        height: 0, // occupé par les labels en dehors
-                      ),
-                  ],
-                ),
-              ),
-            ],
+          final squareSize = constraints.maxWidth / 8;
+          return Column(
+            children: List.generate(8, (rowIdx) {
+              return Row(
+                children: List.generate(8, (colIdx) {
+                  final square = _squareAt(rowIdx, colIdx);
+                  return _buildSquare(square, squareSize, rowIdx, colIdx);
+                }),
+              );
+            }),
           );
         },
       ),
     );
   }
 
-  Widget _buildSquare(String square, double size) {
+  Widget _buildSquare(String square, double size, int rowIdx, int colIdx) {
     final file = square[0];
     final rank = int.parse(square[1]);
     final fileIdx = file.codeUnitAt(0) - 'a'.codeUnitAt(0);
     final isLight = (fileIdx + rank) % 2 == 1;
     final piece = position.pieceAt(square);
+
+    // Coordonnées : rangée = colonne 0 en mode normal (colonne 7 en retourné)
+    //               colonne = ligne 7 en mode normal (ligne 0 en retourné)
+    final bool showRank = flipped ? (colIdx == 7) : (colIdx == 0);
+    final bool showFile = flipped ? (rowIdx == 0) : (rowIdx == 7);
 
     return ChessSquare(
       square: square,
@@ -119,13 +74,13 @@ class ChessBoardWidget extends StatelessWidget {
       isLastMoveSrc: lastMove?.from == square,
       isLastMoveDst: lastMove?.to == square,
       isInCheck: inCheckSquare == square,
+      rankLabel: showRank ? '$rank' : null,
+      fileLabel: showFile ? file : null,
       onTap: () => onSquareTap(square),
       onPieceDrop: (from) => onPieceDrop(from, square),
     );
   }
 
-  /// Retourne la case en notation algébrique pour la cellule [rowIdx][colIdx],
-  /// en tenant compte du retournement du plateau.
   String _squareAt(int rowIdx, int colIdx) {
     final rank = flipped ? (rowIdx + 1) : (8 - rowIdx);
     final fileIdx = flipped ? (7 - colIdx) : colIdx;
@@ -135,6 +90,11 @@ class ChessBoardWidget extends StatelessWidget {
 }
 
 // ─── Sélecteur de promotion ───────────────────────────────────────────────────
+
+import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/settings/settings_provider.dart';
+import '../../../core/theme/board_themes.dart';
 
 /// Modal affiché quand un pion atteint la dernière rangée.
 class PromotionDialog extends StatelessWidget {
@@ -148,10 +108,8 @@ class PromotionDialog extends StatelessWidget {
   final void Function(String pieceType) onSelect;
 
   static const _pieces = ['Q', 'R', 'B', 'N'];
-  static const _unicode = {
-    'wQ': '♕', 'wR': '♖', 'wB': '♗', 'wN': '♘',
-    'bQ': '♛', 'bR': '♜', 'bB': '♝', 'bN': '♞',
-  };
+  static const _labels = {'Q': '♛', 'R': '♜', 'B': '♝', 'N': '♞'};
+  static const _labelsWhite = {'Q': '♕', 'R': '♖', 'B': '♗', 'N': '♘'};
 
   @override
   Widget build(BuildContext context) {
@@ -165,17 +123,14 @@ class PromotionDialog extends StatelessWidget {
           children: [
             const Text(
               'Promotion',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
+              style: TextStyle(color: Colors.white, fontSize: 18,
+                  fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: _pieces.map((p) {
-                final code = '$color$p';
+                final symbols = color == 'w' ? _labelsWhite : _labels;
                 return GestureDetector(
                   onTap: () {
                     Navigator.of(context).pop();
@@ -190,7 +145,7 @@ class PromotionDialog extends StatelessWidget {
                     ),
                     child: Center(
                       child: Text(
-                        _unicode[code] ?? p,
+                        symbols[p] ?? p,
                         style: TextStyle(
                           fontSize: 36,
                           color: color == 'w' ? Colors.white : Colors.black,

@@ -21,6 +21,10 @@ class GameState {
     this.isFlipped = false,
     this.pendingPromotion,
     this.error,
+    // ─── Sprint 3 : mode IA ───
+    this.isAiMode = false,
+    this.aiLevel,
+    this.isAiThinking = false,
   });
 
   final String? gameId;
@@ -30,7 +34,6 @@ class GameState {
   // Interaction plateau
   final String? selectedSquare;
   final Set<String> legalTargets;
-  /// Dictionnaire from → {to} pour toutes les pièces du joueur courant.
   final Map<String, Set<String>> moveMap;
   final ChessMove? lastMove;
 
@@ -45,16 +48,15 @@ class GameState {
 
   // UI
   final bool isFlipped;
-
-  /// Promotion en attente : {from, to} — affiché en modal avant l'envoi.
   final Map<String, String>? pendingPromotion;
-
-  /// Message d'erreur à afficher brièvement.
   final String? error;
 
-  /// "w" ou "b" selon le trait courant.
-  String get activeColor => position.activeColor;
+  // Mode IA
+  final bool isAiMode;
+  final int? aiLevel;
+  final bool isAiThinking;
 
+  String get activeColor => position.activeColor;
   bool get isOver => status == GameStatus.finished;
 
   GameState copyWith({
@@ -73,6 +75,9 @@ class GameState {
     bool? isFlipped,
     Map<String, String>? pendingPromotion,
     String? error,
+    bool? isAiMode,
+    int? aiLevel,
+    bool? isAiThinking,
     bool clearSelected = false,
     bool clearError = false,
     bool clearPendingPromotion = false,
@@ -93,10 +98,11 @@ class GameState {
       isFlipped: isFlipped ?? this.isFlipped,
       pendingPromotion: clearPendingPromotion ? null : (pendingPromotion ?? this.pendingPromotion),
       error: clearError ? null : (error ?? this.error),
+      isAiMode: isAiMode ?? this.isAiMode,
+      aiLevel: aiLevel ?? this.aiLevel,
+      isAiThinking: isAiThinking ?? this.isAiThinking,
     );
   }
 
-  static GameState initial() => GameState(
-        position: BoardPosition.initial(),
-      );
+  static GameState initial() => GameState(position: BoardPosition.initial());
 }

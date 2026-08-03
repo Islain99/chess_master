@@ -1,56 +1,204 @@
-name: CI
+name: CI/CD — Chess Platform
 
 on:
   push:
     branches: [main, develop]
   pull_request:
+    branches: [main]
+
+# ─── Concurrence : annuler les builds en cours sur la même branche ────────────
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20"
+  REGISTRY:     ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/chess
 
 jobs:
-  lint-and-test:
+  # ─── 1. Lint + tests backend ───────────────────────────────────────────────
+  backend-ci:
+    name: Backend CI (${{ matrix.app }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [api, ai-engine]
     services:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: chess
+          POSTGRES_USER:     chess
           POSTGRES_PASSWORD: chess
-          POSTGRES_DB: chess
-        ports:
-          - 5432:5432
+          POSTGRES_DB:       chess
+        ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U chess"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
     defaults:
       run:
-        working-directory: apps/api
+        working-directory: apps/${{ matrix.app }}
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: apps/api/package-lock.json
-      - run: npm install
-      - run: npx prisma generate
-      - run: npm run lint
-      - run: npx prisma db push
-        env:
-          DATABASE_URL: postgresql://chess:chess@localhost:5432/chess
-      - run: npm run test:e2e
-        env:
-          DATABASE_URL: postgresql://chess:chess@localhost:5432/chess
-      - run: npm run build
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/${{ matrix.app }}/package-lock.json
 
-  build-image:
-    needs: lint-and-test
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        if: matrix.app == 'api'
+        run: npx prisma generate
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Push schema to DB
+        if: matrix.app == 'api'
+        run: npx prisma db push
+        env:
+          DATABASE_URL: postgresql://chess:chess@localhost:5432/chess
+
+      - name: Unit + integration tests
+        if: matrix.app == 'api'
+        run: npm run test -- --coverage --testTimeout=20000
+        env:
+          DATABASE_URL: postgresql://chess:chess@localhost:5432/chess
+          REDIS_URL:    redis://localhost:6379
+
+      - name: E2E tests
+        if: matrix.app == 'api'
+        run: npm run test:e2e
+        env:
+          DATABASE_URL: postgresql://chess:chess@localhost:5432/chess
+          REDIS_URL:    redis://localhost:6379
+
+      - name: Upload coverage
+        if: matrix.app == 'api'
+        uses: codecov/codecov-action@v4
+        with:
+          flags: backend
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  # ─── 2. Docker build (sans push sur PR) ───────────────────────────────────
+  docker-build:
+    name: Docker build (${{ matrix.app }})
     runs-on: ubuntu-latest
+    needs: backend-ci
+    strategy:
+      matrix:
+        app: [api, ai-engine]
     steps:
       - uses: actions/checkout@v4
+
       - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+
+      - name: Log in to GHCR
+        if: github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
         with:
-          context: apps/api
-          push: false
-          tags: chess-api:ci
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.app }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context:   apps/${{ matrix.app }}
+          push:      ${{ github.ref == 'refs/heads/main' }}
+          tags:      ${{ steps.meta.outputs.tags }}
+          labels:    ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+
+  # ─── 3. Déploiement sur staging (main uniquement) ─────────────────────────
+  deploy-staging:
+    name: Deploy → staging
+    runs-on: ubuntu-latest
+    needs: docker-build
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: staging
+      url: https://staging.chess.example.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Configure kubeconfig
+        run: |
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > kubeconfig.yml
+          echo "KUBECONFIG=$PWD/kubeconfig.yml" >> $GITHUB_ENV
+
+      - name: Helm upgrade
+        run: |
+          helm upgrade chess-staging ./infra/helm/chess-platform \
+            --namespace chess-staging \
+            --create-namespace \
+            --set global.imageTag=${{ github.sha }} \
+            --set secrets.jwtAccessSecret="${{ secrets.JWT_ACCESS_SECRET }}" \
+            --set secrets.jwtRefreshSecret="${{ secrets.JWT_REFRESH_SECRET }}" \
+            --set secrets.databaseUrl="${{ secrets.DATABASE_URL }}" \
+            --set secrets.redisUrl="${{ secrets.REDIS_URL }}" \
+            --wait --timeout 5m
+
+  # ─── 4. Déploiement production (tag uniquement) ───────────────────────────
+  deploy-production:
+    name: Deploy → production
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment:
+      name: production
+      url: https://chess.example.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Configure kubeconfig
+        run: |
+          echo "${{ secrets.KUBE_CONFIG_PROD }}" | base64 -d > kubeconfig.yml
+          echo "KUBECONFIG=$PWD/kubeconfig.yml" >> $GITHUB_ENV
+
+      - name: Helm upgrade production
+        run: |
+          helm upgrade chess ./infra/helm/chess-platform \
+            --namespace chess \
+            --create-namespace \
+            --set global.imageTag=${{ github.ref_name }} \
+            --set api.replicas=3 \
+            --set secrets.jwtAccessSecret="${{ secrets.JWT_ACCESS_SECRET_PROD }}" \
+            --set secrets.jwtRefreshSecret="${{ secrets.JWT_REFRESH_SECRET_PROD }}" \
+            --set secrets.databaseUrl="${{ secrets.DATABASE_URL_PROD }}" \
+            --set secrets.redisUrl="${{ secrets.REDIS_URL_PROD }}" \
+            --wait --timeout 10m

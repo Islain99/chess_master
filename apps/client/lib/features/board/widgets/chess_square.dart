@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/settings/board_theme.dart';
 import 'chess_piece.dart';
 
 /// Case individuelle du plateau.
-/// Gère le fond coloré, le highlight, les indicateurs de coup légal
-/// et le rendu de la pièce.
+/// Gère le fond coloré, les highlights, les indicateurs de coup légal,
+/// les étiquettes de coordonnées intégrées et le rendu de la pièce.
 class ChessSquare extends StatelessWidget {
   const ChessSquare({
     super.key,
@@ -17,9 +18,13 @@ class ChessSquare extends StatelessWidget {
     this.isLastMoveSrc = false,
     this.isLastMoveDst = false,
     this.isInCheck = false,
+    // Étiquettes de coordonnées insérées dans le coin de la case
+    this.rankLabel,  // ex. "1" – coin supérieur gauche
+    this.fileLabel,  // ex. "a" – coin inférieur droit
     this.onTap,
     this.onPieceDragStart,
     this.onPieceDrop,
+    this.boardTheme = BoardTheme.classic,
   });
 
   final String square;
@@ -31,9 +36,12 @@ class ChessSquare extends StatelessWidget {
   final bool isLastMoveSrc;
   final bool isLastMoveDst;
   final bool isInCheck;
+  final String? rankLabel;
+  final String? fileLabel;
   final VoidCallback? onTap;
   final VoidCallback? onPieceDragStart;
   final void Function(String from)? onPieceDrop;
+  final BoardTheme boardTheme;
 
   @override
   Widget build(BuildContext context) {
@@ -41,7 +49,7 @@ class ChessSquare extends StatelessWidget {
       onTap: onTap,
       child: DragTarget<String>(
         onAcceptWithDetails: (details) => onPieceDrop?.call(details.data),
-        builder: (context, candidateData, rejectedData) {
+        builder: (context, candidateData, _) {
           return Stack(
             children: [
               // ─── Fond de case ──────────────────────────────────────────
@@ -51,7 +59,7 @@ class ChessSquare extends StatelessWidget {
                 color: _backgroundColor(),
               ),
 
-              // ─── Indicateur coup légal (point central) ──────────────────
+              // ─── Indicateur coup légal (point — case vide) ──────────────
               if (isLegalTarget && pieceCode == null)
                 Center(
                   child: Container(
@@ -64,7 +72,7 @@ class ChessSquare extends StatelessWidget {
                   ),
                 ),
 
-              // ─── Indicateur coup légal (anneau si la case est occupée) ──
+              // ─── Indicateur coup légal (anneau — case occupée) ──────────
               if (isLegalTarget && pieceCode != null)
                 Container(
                   width: squareSize,
@@ -80,8 +88,36 @@ class ChessSquare extends StatelessWidget {
 
               // ─── Pièce ──────────────────────────────────────────────────
               if (pieceCode != null)
-                Center(
-                  child: _buildDraggablePiece(),
+                Center(child: _buildDraggablePiece()),
+
+              // ─── Numéro de rangée (coin supérieur gauche) ───────────────
+              if (rankLabel != null)
+                Positioned(
+                  top: 2,
+                  left: 3,
+                  child: Text(
+                    rankLabel!,
+                    style: TextStyle(
+                      fontSize: squareSize * 0.18,
+                      fontWeight: FontWeight.w600,
+                      color: _coordColor(),
+                    ),
+                  ),
+                ),
+
+              // ─── Lettre de colonne (coin inférieur droit) ───────────────
+              if (fileLabel != null)
+                Positioned(
+                  bottom: 2,
+                  right: 3,
+                  child: Text(
+                    fileLabel!,
+                    style: TextStyle(
+                      fontSize: squareSize * 0.18,
+                      fontWeight: FontWeight.w600,
+                      color: _coordColor(),
+                    ),
+                  ),
                 ),
             ],
           );
@@ -91,11 +127,7 @@ class ChessSquare extends StatelessWidget {
   }
 
   Widget _buildDraggablePiece() {
-    final piece = ChessPieceWidget(
-      pieceCode: pieceCode!,
-      size: squareSize,
-    );
-
+    final piece = ChessPieceWidget(pieceCode: pieceCode!, size: squareSize);
     return Draggable<String>(
       data: square,
       onDragStarted: onPieceDragStart,
@@ -109,9 +141,12 @@ class ChessSquare extends StatelessWidget {
   }
 
   Color _backgroundColor() {
-    if (isInCheck) return AppTheme.inCheckSquare;
-    if (isSelected) return AppTheme.selectedSquare;
-    if (isLastMoveSrc || isLastMoveDst) return AppTheme.lastMoveHighlight;
-    return isLight ? AppTheme.lightSquare : AppTheme.darkSquare;
+    if (isInCheck) return boardTheme.inCheck;
+    if (isSelected) return boardTheme.selectedSquare;
+    if (isLastMoveSrc || isLastMoveDst) return boardTheme.lastMove;
+    return isLight ? boardTheme.lightSquare : boardTheme.darkSquare;
   }
+
+  /// Les coordonnées contrastent avec la couleur de la case.
+  Color _coordColor() => isLight ? AppTheme.darkSquare : AppTheme.lightSquare;
 }

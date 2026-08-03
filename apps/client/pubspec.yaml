@@ -18,6 +18,9 @@ dependencies:
   http: ^1.2.1
   socket_io_client: ^2.0.3+1
 
+  # Stockage sécurisé des tokens
+  shared_preferences: ^2.2.3
+
   # UI
   google_fonts: ^6.2.1
   gap: ^3.0.1
