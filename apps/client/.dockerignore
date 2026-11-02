@@ -1,0 +1,15 @@
+# Sprint 13 — Contexte Docker du client : on n'envoie que les sources.
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.idea/
+.vscode/
+build/
+coverage/
+
+# Plateformes natives inutiles pour l'image Web
+android/
+ios/
+macos/
+windows/
+linux/

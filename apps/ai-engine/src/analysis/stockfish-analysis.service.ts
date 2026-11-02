@@ -23,7 +23,9 @@ export class StockfishAnalysisService {
     fen: string,
     depth = 15,
   ): Promise<PositionAnalysis> {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve, _reject) => {
+      // Sprint 13 : « _reject » (préfixe _) — la promesse résout toujours, avec
+      // une évaluation de repli si Stockfish échoue ; satisfait la règle ESLint no-unused-vars.
       let sf: ReturnType<typeof spawn>;
 
       try {

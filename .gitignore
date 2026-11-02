@@ -124,3 +124,43 @@ yarn-debug.log*
 *.tgz
 *.bz2
 *.gz
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sprint 13 — Flutter (apps/client)
+# ─────────────────────────────────────────────────────────────────────────────
+# Fichiers générés localement par `flutter pub get` (ne pas versionner)
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+coverage/
+
+# Sorties de build natives
+**/android/.gradle/
+**/android/local.properties
+**/android/key.properties
+**/android/app/.cxx/
+*.jks
+*.keystore
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/ephemeral/
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/macos/Pods/
+**/macos/Flutter/ephemeral/
+**/windows/flutter/ephemeral/
+**/linux/flutter/ephemeral/
+xcuserdata/
+
+# Exceptions : les règles Visual Studio ci-dessus ([Dd]ebug*/, [Rr]elease*/)
+# masqueraient des fichiers Flutter indispensables.
+!apps/client/android/app/src/debug/
+!apps/client/android/app/src/release/
+
+# Exceptions : les lockfiles npm garantissent des builds reproductibles
+# (`npm ci` en CI et dans les Dockerfiles).
+!apps/api/package-lock.json
+!apps/ai-engine/package-lock.json

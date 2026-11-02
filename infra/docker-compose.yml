@@ -1,3 +1,10 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Environnement de développement complet
+#   docker compose -f infra/docker-compose.yml up --build
+#
+# Sprint 13 : ajout du service « client » (Flutter Web servi par Nginx)
+#   → http://localhost:8080
+# ─────────────────────────────────────────────────────────────────────────────
 services:
   postgres:
     image: postgres:16-alpine
@@ -35,6 +42,11 @@ services:
       DATABASE_URL: postgresql://chess:chess@postgres:5432/chess
     ports:
       - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
       interval: 10s
@@ -59,6 +71,20 @@ services:
         condition: service_healthy
       ai-engine:
         condition: service_healthy
+
+  # ─── Sprint 13 : client Web ────────────────────────────────────────────────
+  # Le navigateur appelle l'API depuis la machine hôte → URL en localhost:3000
+  # (et non api:3000, qui n'existe que dans le réseau Docker).
+  client:
+    build:
+      context: ../apps/client
+      args:
+        API_URL: http://localhost:3000/api/v1
+        WS_URL: http://localhost:3000
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
 
 volumes:
   postgres_data:
