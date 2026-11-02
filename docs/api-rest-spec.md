@@ -78,7 +78,9 @@ Body : `{ "displayName"?: string, "avatarUrl"?: string, "country"?: string }`
 
 ---
 
-## Games (`/games`) — authentifié
+## Games (`/games`) — authentification facultative · sprint 17
+
+Jeton facultatif : les parties LOCAL / AI restent anonymes. Pour les parties en ligne (PRIVATE / MATCHMAKING), `moves`, `resign` et `draw` exigent le JWT d'un **joueur de la partie** et appliquent les règles décrites dans `websocket-events.md` (tour, couleur, nulle proposée, pendule serveur). `POST /games` refuse les modes PRIVATE et MATCHMAKING (400) : ces parties se créent via `/rooms` ou le matchmaking. Erreurs : 401 `AUTH_REQUIRED` · 403 `NOT_A_PLAYER` / `NOT_YOUR_TURN` · 409 `NO_DRAW_OFFER`.
 
 ### POST /games
 Body : `{ "mode": "local"|"ai"|"private"|"matchmaking", "timeControl": "bullet"|"blitz"|"rapid"|"classical", "aiLevel"?: 1-5, "aiTargetElo"?: int }`

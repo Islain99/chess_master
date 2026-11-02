@@ -6,15 +6,31 @@ import {
   HttpCode,
   Param,
   Post,
+  Req,
   Res,
+  UseGuards,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Request, Response } from 'express';
+import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
+import type { RequestUser } from '../auth/strategies/jwt.strategy';
+import { Actor } from './game-access';
 import { GamesService } from './games.service';
 import { CreateGameDto } from './dto/create-game.dto';
 import { ImportGameDto } from './dto/import-game.dto';
 import { MakeMoveDto } from './dto/make-move.dto';
 
+/** Sprint 17 : auteur de la requête (anonyme si aucun jeton valide). */
+function actorOf(req: Request): Actor {
+  return { userId: (req.user as RequestUser | undefined)?.userId };
+}
+
+/**
+ * Sprint 17 : garde JWT facultative sur tout le contrôleur. Les contrôles
+ * d'autorisation (joueur, tour, couleur) sont faits par GamesService, de
+ * façon identique pour REST et Socket.IO.
+ */
 @Controller('games')
+@UseGuards(OptionalJwtAuthGuard)
 export class GamesController {
   constructor(private readonly gamesService: GamesService) {}
 
@@ -40,8 +56,8 @@ export class GamesController {
 
   /** POST /games/:id/moves — jouer un coup */
   @Post(':id/moves')
-  makeMove(@Param('id') id: string, @Body() dto: MakeMoveDto) {
-    return this.gamesService.makeMove(id, dto);
+  makeMove(@Param('id') id: string, @Body() dto: MakeMoveDto, @Req() req: Request) {
+    return this.gamesService.makeMove(id, dto, actorOf(req));
   }
 
   /** POST /games/:id/undo — annuler le dernier coup (mode LOCAL) */
@@ -57,15 +73,17 @@ export class GamesController {
   resign(
     @Param('id') id: string,
     @Body() body: { color: 'white' | 'black' },
+    @Req() req: Request,
   ) {
-    return this.gamesService.resign(id, body.color ?? 'white');
+    // En ligne, `color` est ignorée : c'est la couleur du joueur authentifié.
+    return this.gamesService.resign(id, body.color === 'black' ? 'black' : 'white', actorOf(req));
   }
 
   /** POST /games/:id/draw — nulle par accord */
   @Post(':id/draw')
   @HttpCode(200)
-  acceptDraw(@Param('id') id: string) {
-    return this.gamesService.acceptDraw(id);
+  acceptDraw(@Param('id') id: string, @Req() req: Request) {
+    return this.gamesService.acceptDraw(id, actorOf(req));
   }
 
   /** GET /games/:id/pgn — export PGN en texte brut */

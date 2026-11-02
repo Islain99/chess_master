@@ -11,6 +11,8 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { GamesService } from '../games/games.service';
+import { Actor, isOnlineGame, SYSTEM_ACTOR } from '../games/game-access';
+import { ResultReason } from '../common/prisma-enums';
 import {
   GameForNotification,
   NotificationsService,
@@ -47,7 +49,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   /** socket.id → ConnInfo */
   private readonly connections = new Map<string, ConnInfo>();
 
-  /** gameId → timer de forfait en cas de déconnexion */
+  /** `${gameId}:${couleur}` → timer de forfait en cas de déconnexion (sprint 17 : par joueur) */
   private readonly disconnectTimers = new Map<string, NodeJS.Timeout>();
   private readonly moveLimiter = new WsRateLimiter(5_000, 20);
 
@@ -63,6 +65,23 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   // ──────────────────────────────────────────────
   // Notifications (sprint 16)
   // ──────────────────────────────────────────────
+
+  /**
+   * Sprint 17 : auteur d'une action = utilisateur authentifié au handshake.
+   * Rien de ce que le client met dans le message (couleur…) n'est pris en compte.
+   */
+  private actorOf(client: Socket): Actor {
+    return { userId: this.connections.get(client.id)?.userId };
+  }
+
+  /** Message d'erreur lisible pour le client à partir d'une exception Nest. */
+  private errorPayload(err: any, fallback: string) {
+    const response = err?.response;
+    return {
+      error: response?.error ?? fallback,
+      message: response?.message ?? err?.message ?? fallback,
+    };
+  }
 
   /** Vrai si l'utilisateur a un socket ouvert sur cette partie. */
   private isWatching(gameId: string, userId: string): boolean {
@@ -117,40 +136,45 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   handleDisconnect(client: Socket) {
     const conn = this.connections.get(client.id);
-    if (conn?.gameId) {
-      // Notifier l'adversaire et démarrer la période de grâce (30 s)
-      client.to(`game:${conn.gameId}`).emit('game:opponentDisconnected', {
-        graceMs: 30_000,
-      });
-
-      const timer = setTimeout(async () => {
-        // Si la partie est toujours en cours après 30 s : forfait
-        try {
-          const state = await this.gamesService.findById(conn.gameId!);
-          if (state.status === 'ONGOING') {
-            const ended = await this.gamesService.resign(
-              conn.gameId!,
-              conn.color ?? 'white',
-            );
-            this.server.to(`game:${conn.gameId}`).emit('game:ended', {
-              result: conn.color === 'white' ? 'BLACK_WIN' : 'WHITE_WIN',
-              reason: 'ABANDONED',
-            });
-            // Sprint 16 : le joueur resté prévenu même s'il a fermé l'appli entre-temps.
-            this.notifyEnded({ ...ended, resultReason: 'ABANDONED' });
-          }
-        } catch (err) {
-          this.logger.warn(`Forfait impossible : ${err}`);
-        }
-        this.disconnectTimers.delete(conn.gameId!);
-      }, 30_000);
-
-      this.disconnectTimers.set(conn.gameId, timer);
-    }
-
     this.moveLimiter.remove(client.id);
     this.connections.delete(client.id);
     this.logger.debug(`Déconnecté : ${client.id}`);
+
+    // Sprint 17 : seul un JOUEUR peut perdre par forfait (avant : un
+    // spectateur qui partait faisait perdre les blancs), et seulement s'il
+    // n'a plus aucun autre onglet / appareil connecté à la partie.
+    if (!conn?.gameId || !conn.color || !conn.userId) return;
+    if (this.isWatching(conn.gameId, conn.userId)) return;
+
+    const { gameId, color, userId } = conn;
+    client.to(`game:${gameId}`).emit('game:opponentDisconnected', { graceMs: 30_000 });
+
+    const key = `${gameId}:${color}`;
+    clearTimeout(this.disconnectTimers.get(key));
+    const timer = setTimeout(async () => {
+      this.disconnectTimers.delete(key);
+      if (this.isWatching(gameId, userId)) return; // revenu entre-temps
+      try {
+        const state = await this.gamesService.findById(gameId);
+        if (state.status !== 'ONGOING' || !isOnlineGame(state.mode)) return;
+
+        const ended = await this.gamesService.resign(
+          gameId,
+          color,
+          SYSTEM_ACTOR,
+          ResultReason.ABANDONED,
+        );
+        this.server.to(`game:${gameId}`).emit('game:ended', {
+          result: ended.result,
+          reason: ended.resultReason,
+        });
+        // Sprint 16 : le joueur resté prévenu même s'il a fermé l'appli entre-temps.
+        this.notifyEnded(ended);
+      } catch (err) {
+        this.logger.warn(`Forfait impossible : ${err}`);
+      }
+    }, 30_000);
+    this.disconnectTimers.set(key, timer);
   }
 
   // ──────────────────────────────────────────────
@@ -164,14 +188,6 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {
     const conn: ConnInfo = this.connections.get(client.id) ?? {};
     conn.gameId = data.gameId;
-
-    // Annuler le forfait si le joueur se reconnecte
-    const timer = this.disconnectTimers.get(data.gameId);
-    if (timer) {
-      clearTimeout(timer);
-      this.disconnectTimers.delete(data.gameId);
-      client.to(`game:${data.gameId}`).emit('game:opponentReconnected');
-    }
 
     await client.join(`game:${data.gameId}`);
 
@@ -188,6 +204,15 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         else if ((state as any).blackPlayerId === conn.userId) conn.color = 'black';
       }
       this.connections.set(client.id, conn);
+
+      // Annuler le forfait si ce joueur revient (sprint 17 : timer par couleur)
+      const timerKey = `${data.gameId}:${conn.color}`;
+      const timer = conn.color ? this.disconnectTimers.get(timerKey) : undefined;
+      if (timer) {
+        clearTimeout(timer);
+        this.disconnectTimers.delete(timerKey);
+        client.to(`game:${data.gameId}`).emit('game:opponentReconnected');
+      }
 
       // Diffuser l'état à toute la room (y compris le joueur qui vient de rejoindre)
       // → permet à l'hôte de détecter que l'adversaire a rejoint
@@ -215,10 +240,13 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
     try {
-      const result = await this.gamesService.makeMove(data.gameId, {
-        uci: data.uci,
-        timeSpentMs: data.timeSpentMs,
-      });
+      // Sprint 17 : le service vérifie joueur + tour ; timeSpentMs est
+      // ignoré en ligne (pendule mesurée par le serveur).
+      const result = await this.gamesService.makeMove(
+        data.gameId,
+        { uci: data.uci, timeSpentMs: data.timeSpentMs },
+        this.actorOf(client),
+      );
 
       // Diffuser le coup validé à tous les joueurs de la room
       this.server.to(`game:${data.gameId}`).emit('game:moveMade', result);
@@ -242,9 +270,10 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         );
       }
     } catch (err: any) {
-      // Coup illégal → renvoyer uniquement à son auteur
+      // Coup illégal, pas son tour, pas joueur… → uniquement à son auteur
       client.emit('game:invalidMove', {
         reason: err?.response?.error ?? 'ILLEGAL_MOVE',
+        message: err?.response?.message,
         uci: data.uci,
       });
     }
@@ -257,17 +286,24 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('game:resign')
   async handleResign(
     @MessageBody() data: { gameId: string; color: 'white' | 'black' },
-    @ConnectedSocket() _client: Socket,
+    @ConnectedSocket() client: Socket,
   ) {
     try {
-      const game = await this.gamesService.resign(data.gameId, data.color);
+      // Sprint 17 : en ligne, la couleur est celle du joueur authentifié
+      // (data.color ne sert qu'aux parties locales).
+      const game = await this.gamesService.resign(
+        data.gameId,
+        data.color === 'black' ? 'black' : 'white',
+        this.actorOf(client),
+      );
       this.server.to(`game:${data.gameId}`).emit('game:ended', {
         result: game.result,
         reason: game.resultReason,
       });
       this.notifyEnded(game);
     } catch (err) {
-      this.logger.warn(`game:resign error : ${err}`);
+      this.logger.warn(`game:resign refusé : ${err}`);
+      client.emit('game:error', this.errorPayload(err, 'RESIGN_REFUSED'));
     }
   }
 
@@ -276,12 +312,17 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   // ──────────────────────────────────────────────
 
   @SubscribeMessage('game:drawOffer')
-  handleDrawOffer(
+  async handleDrawOffer(
     @MessageBody() data: { gameId: string },
     @ConnectedSocket() client: Socket,
   ) {
-    // Notifier uniquement l'adversaire
-    client.to(`game:${data.gameId}`).emit('game:drawOffered');
+    try {
+      // Sprint 17 : seule une proposition d'un joueur est enregistrée et relayée.
+      const by = await this.gamesService.offerDraw(data.gameId, this.actorOf(client));
+      client.to(`game:${data.gameId}`).emit('game:drawOffered', { by });
+    } catch (err) {
+      client.emit('game:error', this.errorPayload(err, 'DRAW_OFFER_REFUSED'));
+    }
   }
 
   // ──────────────────────────────────────────────
@@ -295,17 +336,24 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {
     if (data.accept) {
       try {
-        const game = await this.gamesService.acceptDraw(data.gameId);
+        // Sprint 17 : refusé s'il n'y a pas de proposition de l'adversaire.
+        const game = await this.gamesService.acceptDraw(data.gameId, this.actorOf(client));
         this.server.to(`game:${data.gameId}`).emit('game:ended', {
           result: 'DRAW',
           reason: 'DRAW_AGREEMENT',
         });
         this.notifyEnded(game);
       } catch (err) {
-        this.logger.warn(`game:drawResponse error : ${err}`);
+        this.logger.warn(`game:drawResponse refusé : ${err}`);
+        client.emit('game:error', this.errorPayload(err, 'DRAW_ACCEPT_REFUSED'));
       }
     } else {
-      client.to(`game:${data.gameId}`).emit('game:drawDeclined');
+      try {
+        await this.gamesService.declineDraw(data.gameId, this.actorOf(client));
+        client.to(`game:${data.gameId}`).emit('game:drawDeclined');
+      } catch (err) {
+        client.emit('game:error', this.errorPayload(err, 'DRAW_DECLINE_REFUSED'));
+      }
     }
   }
 }

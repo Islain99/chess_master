@@ -26,6 +26,22 @@ class _OnlineGameScreenState extends ConsumerState<OnlineGameScreen> {
   Widget build(BuildContext context) {
     final asyncState = ref.watch(multiplayerProvider);
 
+    // Sprint 17 : afficher les refus du serveur (pas votre tour, nulle non
+    // proposée…), puis les effacer pour qu'un même refus puisse se réafficher.
+    ref.listen(multiplayerProvider, (_, next) {
+      final s = next.valueOrNull;
+      final message = s?.error ?? s?.board.error;
+      if (message == null) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.red.shade700,
+        ));
+      ref.read(multiplayerProvider.notifier).clearErrors();
+    });
+
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(

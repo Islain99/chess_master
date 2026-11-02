@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -17,6 +18,14 @@ import {
   TimeControlCategory,
 } from '../common/prisma-enums';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  Actor,
+  assertCanMove,
+  isOnlineGame,
+  opposite,
+  requirePlayer,
+  Seat,
+} from './game-access';
 import { ChessEngineService } from './chess-engine.service';
 import { AiEngineService } from './ai/ai-engine.service';
 import { StockfishClientService } from './ai/stockfish-client.service';
@@ -38,6 +47,14 @@ const TIME_MS: Record<TimeControlCategory, number> = {
 export class GamesService {
   private readonly logger = new Logger(GamesService.name);
 
+  /**
+   * Sprint 17 : propositions de nulle en attente (gameId → couleur qui propose).
+   * En mémoire : suffisant avec un seul pod API ou avec l'affinité de session
+   * Socket.IO ; à déplacer dans Redis si les joueurs d'une même partie
+   * peuvent être servis par des pods différents.
+   */
+  private readonly pendingDrawOffers = new Map<string, Seat>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly engine: ChessEngineService,
@@ -51,6 +68,13 @@ export class GamesService {
   // ──────────────────────────────────────────────
 
   async create(dto: CreateGameDto) {
+    // Sprint 17 : une partie en ligne créée ici n'aurait aucun joueur assigné
+    // (donc aucun contrôle d'accès possible) → passer par /rooms ou le matchmaking.
+    if (isOnlineGame(dto.mode)) {
+      throw new BadRequestException(
+        'Les parties en ligne se créent via une salle privée (/rooms) ou le matchmaking.',
+      );
+    }
     if (dto.mode === GameMode.AI && !dto.aiLevel) {
       throw new BadRequestException('aiLevel est requis pour le mode AI (1–5).');
     }
@@ -117,7 +141,12 @@ export class GamesService {
   // Coup (joueur humain)
   // ──────────────────────────────────────────────
 
-  async makeMove(id: string, dto: MakeMoveDto) {
+  /**
+   * Joue un coup. `actor` : auteur authentifié (obligatoire en ligne).
+   * Sprint 17 : en ligne, seul le joueur au trait peut jouer, et le temps
+   * consommé est mesuré par le serveur (la valeur du client est ignorée).
+   */
+  async makeMove(id: string, dto: MakeMoveDto, actor?: Actor) {
     const game = await this.prisma.game.findUnique({
       where: { id },
       include: { moves: { orderBy: { ply: 'asc' } } },
@@ -128,6 +157,9 @@ export class GamesService {
       throw new BadRequestException('Cette partie est terminée.');
     }
 
+    const online = isOnlineGame(game.mode);
+    if (online) assertCanMove(game, actor);
+
     const moveResult = this.engine.applyMove(game.currentFen, dto.uci);
     if (!moveResult.valid) {
       throw new UnprocessableEntityException({
@@ -137,7 +169,9 @@ export class GamesService {
     }
 
     const activeColor = this.engine.activeColor(game.currentFen);
-    const timeSpentMs = dto.timeSpentMs ?? 0;
+    const timeSpentMs = online
+      ? this.serverElapsedMs(game.moves.at(-1)?.createdAt ?? game.startedAt)
+      : dto.timeSpentMs ?? 0;
 
     let newWhiteMs =
       activeColor === 'w'
@@ -155,6 +189,9 @@ export class GamesService {
     let { newGameStatus, result, reason } = this.resolveGameEnd(
       status, newWhiteMs, newBlackMs,
     );
+
+    // Un coup joué met fin à toute proposition de nulle en cours.
+    this.pendingDrawOffers.delete(id);
 
     const [move, _upd] = await this.prisma.$transaction([
       this.prisma.move.create({
@@ -371,38 +408,78 @@ export class GamesService {
   // Abandon
   // ──────────────────────────────────────────────
 
-  async resign(id: string, color: 'white' | 'black') {
+  /**
+   * Abandon. En ligne, la couleur qui abandonne est celle de l'acteur : la
+   * valeur `color` fournie par le client est ignorée (sprint 17).
+   * `reason` : ABANDONED pour un forfait après déconnexion (acteur système).
+   */
+  async resign(
+    id: string,
+    color: Seat,
+    actor?: Actor,
+    reason: ResultReason = ResultReason.RESIGNATION,
+  ) {
     const game = await this.prisma.game.findUnique({ where: { id } });
     if (!game) throw new NotFoundException(`Partie ${id} introuvable.`);
     if (game.status !== GameStatus.ONGOING) {
       throw new BadRequestException('Cette partie est déjà terminée.');
     }
 
-    const result = color === 'white' ? GameResult.BLACK_WIN : GameResult.WHITE_WIN;
+    const loser: Seat =
+      isOnlineGame(game.mode) && !actor?.system ? requirePlayer(game, actor) : color;
+    const result = loser === 'white' ? GameResult.BLACK_WIN : GameResult.WHITE_WIN;
 
-    return this.prisma.game.update({
+    const ended = await this.prisma.game.update({
       where: { id },
       data: {
         status: GameStatus.FINISHED,
         result,
-        resultReason: ResultReason.RESIGNATION,
+        resultReason: reason,
         endedAt: new Date(),
       },
     });
+    this.afterGameEnded(ended);
+    return ended;
   }
 
   // ──────────────────────────────────────────────
   // Nulle par accord
   // ──────────────────────────────────────────────
 
-  async acceptDraw(id: string) {
-    const game = await this.prisma.game.findUnique({ where: { id } });
-    if (!game) throw new NotFoundException(`Partie ${id} introuvable.`);
-    if (game.status !== GameStatus.ONGOING) {
-      throw new BadRequestException('Cette partie est déjà terminée.');
+  /**
+   * Sprint 17 — Proposition de nulle (parties en ligne). Renvoie la couleur
+   * qui propose, pour que la gateway prévienne l'adversaire.
+   */
+  async offerDraw(id: string, actor?: Actor): Promise<Seat> {
+    const game = await this.findOngoing(id);
+    if (!isOnlineGame(game.mode)) {
+      throw new BadRequestException('La proposition de nulle concerne les parties en ligne.');
+    }
+    const seat = requirePlayer(game, actor);
+    this.pendingDrawOffers.set(id, seat);
+    return seat;
+  }
+
+  /** Sprint 17 — Refus d'une nulle proposée par l'adversaire. */
+  async declineDraw(id: string, actor?: Actor): Promise<void> {
+    const game = await this.findOngoing(id);
+    if (!isOnlineGame(game.mode)) return;
+    const seat = requirePlayer(game, actor);
+    this.consumeDrawOffer(id, seat);
+  }
+
+  /**
+   * Nulle par accord. En ligne : uniquement en réponse à une proposition de
+   * l'ADVERSAIRE (sprint 17). Parties locales : immédiate, comme avant.
+   */
+  async acceptDraw(id: string, actor?: Actor) {
+    const game = await this.findOngoing(id);
+
+    if (isOnlineGame(game.mode)) {
+      this.consumeDrawOffer(id, requirePlayer(game, actor));
     }
 
-    return this.prisma.game.update({
+    const ended = await this.prisma.game.update({
       where: { id },
       data: {
         status: GameStatus.FINISHED,
@@ -411,6 +488,51 @@ export class GamesService {
         endedAt: new Date(),
       },
     });
+    this.afterGameEnded(ended);
+    return ended;
+  }
+
+  // ──────────────────────────────────────────────
+  // Helpers sprint 17
+  // ──────────────────────────────────────────────
+
+  private async findOngoing(id: string) {
+    const game = await this.prisma.game.findUnique({ where: { id } });
+    if (!game) throw new NotFoundException(`Partie ${id} introuvable.`);
+    if (game.status !== GameStatus.ONGOING) {
+      throw new BadRequestException('Cette partie est déjà terminée.');
+    }
+    return game;
+  }
+
+  /** Vérifie et retire la proposition de nulle faite par l'adversaire de `seat`. */
+  private consumeDrawOffer(id: string, seat: Seat) {
+    if (this.pendingDrawOffers.get(id) !== opposite(seat)) {
+      throw new ConflictException({
+        error: 'NO_DRAW_OFFER',
+        message: 'Votre adversaire ne vous a pas proposé la nulle.',
+      });
+    }
+    this.pendingDrawOffers.delete(id);
+  }
+
+  /** Temps écoulé depuis le dernier coup (ou le début), mesuré par le serveur. */
+  private serverElapsedMs(since: Date | null): number {
+    return since ? Math.max(0, Date.now() - since.getTime()) : 0;
+  }
+
+  /**
+   * Fin de partie hors coup (abandon, nulle, forfait) : nettoyage et Elo.
+   * Avant le sprint 17, l'Elo n'était recalculé que sur mat/pat/temps :
+   * abandonner une partie classée ne coûtait aucun point.
+   */
+  private afterGameEnded(game: { id: string; mode: GameMode }) {
+    this.pendingDrawOffers.delete(game.id);
+    if (game.mode === GameMode.MATCHMAKING) {
+      this.ratingsService.updateAfterGame(game.id).catch((err) =>
+        this.logger.warn(`Mise à jour Elo échouée pour ${game.id} : ${err}`),
+      );
+    }
   }
 
   // ──────────────────────────────────────────────

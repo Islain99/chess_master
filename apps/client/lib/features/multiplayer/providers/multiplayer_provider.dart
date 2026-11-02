@@ -309,12 +309,22 @@ class MultiplayerNotifier extends StateNotifier<AsyncValue<OnlineGameState>> {
       ));
     });
 
-    // Coup refusé
+    // Coup refusé (sprint 17 : le serveur explique pourquoi — pas votre tour…)
     _ws.onGame('game:invalidMove', (data) {
       final s = state.valueOrNull;
       if (s == null) return;
+      final message = data['message'] as String? ?? 'Coup refusé : ${data['reason']}';
       state = AsyncValue.data(s.copyWith(
-        board: s.board.copyWith(error: 'Coup refusé : ${data['reason']}'),
+        board: s.board.copyWith(error: message),
+      ));
+    });
+
+    // Sprint 17 : action refusée par le serveur (abandon, nulle…)
+    _ws.onGame('game:error', (data) {
+      final s = state.valueOrNull;
+      if (s == null) return;
+      state = AsyncValue.data(s.copyWith(
+        error: data['message'] as String? ?? 'Action refusée par le serveur.',
       ));
     });
 
@@ -345,6 +355,16 @@ class MultiplayerNotifier extends StateNotifier<AsyncValue<OnlineGameState>> {
       if (s == null) return;
       state = AsyncValue.data(s.copyWith(drawOffered: false));
     });
+  }
+
+  /// Sprint 17 : efface les messages d'erreur une fois affichés à l'écran.
+  void clearErrors() {
+    final s = state.valueOrNull;
+    if (s == null || (s.error == null && s.board.error == null)) return;
+    state = AsyncValue.data(s.copyWith(
+      clearError: true,
+      board: s.board.copyWith(clearError: true),
+    ));
   }
 
   void _tryMove(String from, String to, OnlineGameState s) {
