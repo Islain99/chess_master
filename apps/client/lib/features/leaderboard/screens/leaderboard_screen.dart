@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
-import '../../../core/http/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../auth/providers/auth_provider.dart';
 
@@ -112,10 +111,10 @@ class _LeaderboardRow extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isMe ? AppTheme.primary.withOpacity(0.4) : AppTheme.surface,
+        color: isMe ? AppTheme.primary.withValues(alpha: 0.4) : AppTheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: isMe
-            ? Border.all(color: AppTheme.accent.withOpacity(0.6))
+            ? Border.all(color: AppTheme.accent.withValues(alpha: 0.6))
             : null,
       ),
       child: Row(
@@ -126,7 +125,7 @@ class _LeaderboardRow extends StatelessWidget {
                 ? Text(medal, style: const TextStyle(fontSize: 20))
                 : Text('#$rank',
                     style: TextStyle(
-                        color: Colors.white.withOpacity(0.4), fontSize: 13)),
+                        color: Colors.white.withValues(alpha: 0.4), fontSize: 13)),
           ),
           CircleAvatar(
             radius: 18,
@@ -147,7 +146,7 @@ class _LeaderboardRow extends StatelessWidget {
                         fontSize: 14)),
                 Text('$gamesPlayed parties · $winRate% victoires',
                     style: TextStyle(
-                        color: Colors.white.withOpacity(0.4), fontSize: 11)),
+                        color: Colors.white.withValues(alpha: 0.4), fontSize: 11)),
               ],
             ),
           ),

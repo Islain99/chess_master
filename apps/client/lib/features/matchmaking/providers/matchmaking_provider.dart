@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/services/socket_service.dart';
-import '../../../core/http/api_client.dart';
 import '../../auth/providers/auth_provider.dart';
 
 // ─── État ─────────────────────────────────────────────────────────────────────

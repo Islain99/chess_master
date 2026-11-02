@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../auth/models/auth_state.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../auth/screens/login_screen.dart';
 import '../../game/providers/game_provider.dart';
@@ -13,7 +14,6 @@ import '../../matchmaking/screens/matchmaking_screen.dart';
 import '../../multiplayer/screens/lobby_screen.dart';
 import '../../notifications/providers/notifications_provider.dart';
 import '../../notifications/screens/notifications_screen.dart';
-import '../../settings/screens/settings_screen.dart';
 import '../../settings/screens/settings_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -51,7 +51,7 @@ class HomeScreen extends ConsumerWidget {
                       Text('Sprint 8 — analyse & classement',
                           style: TextStyle(
                               fontSize: 12,
-                              color: Colors.white.withOpacity(0.4))),
+                              color: Colors.white.withValues(alpha: 0.4))),
                     ],
                   ),
                 ),
@@ -258,7 +258,7 @@ class _WelcomeCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [AppTheme.primary, AppTheme.primary.withOpacity(0.5)],
+          colors: [AppTheme.primary, AppTheme.primary.withValues(alpha: 0.5)],
           begin: Alignment.topLeft, end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(14),
@@ -280,7 +280,7 @@ class _WelcomeCard extends StatelessWidget {
             const Gap(2),
             Text(user.email,
                 style: TextStyle(
-                    color: Colors.white.withOpacity(0.55), fontSize: 12)),
+                    color: Colors.white.withValues(alpha: 0.55), fontSize: 12)),
           ]),
         ),
       ]),
@@ -312,7 +312,7 @@ class _ProfileSheet extends ConsumerWidget {
         const Gap(4),
         Text(user.email,
             style: TextStyle(
-                color: Colors.white.withOpacity(0.55), fontSize: 13)),
+                color: Colors.white.withValues(alpha: 0.55), fontSize: 13)),
         const Gap(24),
         SizedBox(
           width: double.infinity,
@@ -361,7 +361,7 @@ class _ModeCard extends StatelessWidget {
                 const Gap(2),
                 Text(subtitle,
                     style: TextStyle(
-                        color: Colors.white.withOpacity(0.5), fontSize: 12)),
+                        color: Colors.white.withValues(alpha: 0.5), fontSize: 12)),
               ]),
             ),
             const Icon(Icons.arrow_forward_ios, size: 15, color: Colors.white54),
@@ -391,7 +391,7 @@ class _ToolCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppTheme.surface,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white.withOpacity(0.08)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
         ),
         child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
           Stack(children: [
@@ -437,7 +437,7 @@ class _TimeControlRow extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: AppTheme.surface,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white.withOpacity(0.1)),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
                 ),
                 child: Column(children: [
                   Text(c.$2, style: const TextStyle(fontSize: 18)),
@@ -445,7 +445,7 @@ class _TimeControlRow extends StatelessWidget {
                   Text(c.$3,
                       style: TextStyle(
                           fontSize: 11,
-                          color: Colors.white.withOpacity(0.5))),
+                          color: Colors.white.withValues(alpha: 0.5))),
                 ]),
               ),
             ),

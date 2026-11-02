@@ -96,7 +96,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           // ─── Bandeau "IA réfléchit" ──────────────────────────────────────
           if (state.isAiThinking)
             Container(
-              color: AppTheme.primary.withOpacity(0.4),
+              color: AppTheme.primary.withValues(alpha: 0.4),
               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -289,7 +289,7 @@ class _PlayerInfoBar extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: isActive ? AppTheme.primary.withOpacity(0.3) : Colors.transparent,
+      color: isActive ? AppTheme.primary.withValues(alpha: 0.3) : Colors.transparent,
       child: Row(
         children: [
           Container(
@@ -321,7 +321,7 @@ class _PlayerInfoBar extends StatelessWidget {
                 if (sublabel != null)
                   Text(sublabel!,
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.45),
+                        color: Colors.white.withValues(alpha: 0.45),
                         fontSize: 11,
                       )),
               ],

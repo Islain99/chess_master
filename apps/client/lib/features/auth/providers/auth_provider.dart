@@ -54,7 +54,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<AuthState>> {
       final expiresAtMs  = prefs.getInt('expires_at');
 
       if (accessToken == null || refreshToken == null || expiresAtMs == null) {
-        state = AsyncValue.data(const AuthState());
+        state = const AsyncValue.data(AuthState());
         return;
       }
 
@@ -77,7 +77,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<AuthState>> {
       state = AsyncValue.data(AuthState(user: user, tokens: tokens));
     } catch (_) {
       await _clearStorage();
-      state = AsyncValue.data(const AuthState());
+      state = const AsyncValue.data(AuthState());
     }
   }
 
@@ -135,7 +135,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<AuthState>> {
     }
 
     await _clearStorage();
-    state = AsyncValue.data(const AuthState());
+    state = const AsyncValue.data(AuthState());
   }
 
   // ─── Renouvellement silencieux ────────────────────────────────────────────
@@ -146,7 +146,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<AuthState>> {
       await _handleAuthResponse(data);
     } catch (_) {
       await _clearStorage();
-      state = AsyncValue.data(const AuthState());
+      state = const AsyncValue.data(AuthState());
     }
   }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
 import '../models/board_position.dart';
 import '../models/chess_move.dart';
 import 'chess_square.dart';
@@ -90,11 +91,6 @@ class ChessBoardWidget extends StatelessWidget {
 }
 
 // ─── Sélecteur de promotion ───────────────────────────────────────────────────
-
-import 'package:flutter/material.dart';
-import '../../../core/theme/app_theme.dart';
-import '../../../core/settings/settings_provider.dart';
-import '../../../core/theme/board_themes.dart';
 
 /// Modal affiché quand un pion atteint la dernière rangée.
 class PromotionDialog extends StatelessWidget {

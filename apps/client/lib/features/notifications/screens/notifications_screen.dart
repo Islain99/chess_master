@@ -39,7 +39,7 @@ class NotificationsScreen extends ConsumerWidget {
               : ListView.separated(
                   itemCount:    state.items.length,
                   separatorBuilder: (_, __) =>
-                      Divider(color: Colors.white.withOpacity(0.06), height: 1),
+                      Divider(color: Colors.white.withValues(alpha: 0.06), height: 1),
                   itemBuilder: (ctx, i) {
                     final n = state.items[i];
                     return _NotificationTile(
@@ -65,7 +65,7 @@ class NotificationsScreen extends ConsumerWidget {
           const Gap(8),
           Text('Elles apparaîtront ici au fil de vos parties.',
               style: TextStyle(
-                  color: Colors.white.withOpacity(0.35), fontSize: 13)),
+                  color: Colors.white.withValues(alpha: 0.35), fontSize: 13)),
         ],
       ),
     );
@@ -140,7 +140,7 @@ class _NotificationTile extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Container(
-        color: item.isRead ? Colors.transparent : AppTheme.primary.withOpacity(0.15),
+        color: item.isRead ? Colors.transparent : AppTheme.primary.withValues(alpha: 0.15),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -148,7 +148,7 @@ class _NotificationTile extends StatelessWidget {
             Container(
               width: 40, height: 40,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.15),
+                color: color.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(icon, color: color, size: 20),
@@ -183,12 +183,12 @@ class _NotificationTile extends StatelessWidget {
                   const Gap(3),
                   Text(_subtitle(),
                       style: TextStyle(
-                          color: Colors.white.withOpacity(0.5),
+                          color: Colors.white.withValues(alpha: 0.5),
                           fontSize: 12)),
                   const Gap(5),
                   Text(_timeAgo(),
                       style: TextStyle(
-                          color: Colors.white.withOpacity(0.28),
+                          color: Colors.white.withValues(alpha: 0.28),
                           fontSize: 11)),
                 ],
               ),

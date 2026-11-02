@@ -19,7 +19,6 @@ abstract final class AppTheme {
   // ─── Thèmes Material ────────────────────────────────────────────────────
   static ThemeData get dark {
     const colorScheme = ColorScheme.dark(
-      background: background,
       surface: surface,
       primary: accent,
       onPrimary: Colors.white,
@@ -45,12 +44,12 @@ abstract final class AppTheme {
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
         ),
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: surface,
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: Colors.white.withOpacity(0.08)),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
         ),
       ),
     );
@@ -58,7 +57,6 @@ abstract final class AppTheme {
 
   static ThemeData get light {
     const colorScheme = ColorScheme.light(
-      background: Color(0xFFF5F5F5),
       surface: Colors.white,
       primary: Color(0xFF0F3460),
       onPrimary: Colors.white,

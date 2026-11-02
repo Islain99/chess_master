@@ -4,13 +4,14 @@ import 'dart:math' as math;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/http/api_client.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../../board/models/board_position.dart';
 import '../../board/models/chess_move.dart';
 import '../models/game_state.dart';
 
 // ─── Providers ────────────────────────────────────────────────────────────────
 
-// apiClientProvider est défini dans auth_provider.dart — il injecte le JWT si connecté.
+// apiClientProvider (auth_provider.dart) injecte le JWT si l'utilisateur est connecté.
 
 final gameProvider =
     StateNotifierProvider<GameNotifier, AsyncValue<GameState>>((ref) {

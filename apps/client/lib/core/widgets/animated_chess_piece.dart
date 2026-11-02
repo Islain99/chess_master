@@ -107,7 +107,7 @@ class _LastMoveFlashState extends State<LastMoveFlash>
       duration: const Duration(milliseconds: 400),
     );
     _colorAnim = ColorTween(
-      begin: AppTheme.accent.withOpacity(0.6),
+      begin: AppTheme.accent.withValues(alpha: 0.6),
       end:   widget.color,
     ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
     _ctrl.forward();

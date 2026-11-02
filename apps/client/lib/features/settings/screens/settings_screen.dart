@@ -21,7 +21,7 @@ class SettingsScreen extends ConsumerWidget {
         padding: const EdgeInsets.all(20),
         children: [
           // ─── Thème du plateau ───────────────────────────────────────────
-          _Section(title: 'Plateau'),
+          const _Section(title: 'Plateau'),
           const Gap(10),
           Wrap(
             spacing: 10,
@@ -86,7 +86,7 @@ class SettingsScreen extends ConsumerWidget {
           const Gap(28),
 
           // ─── Style des pièces ────────────────────────────────────────────
-          _Section(title: 'Pièces'),
+          const _Section(title: 'Pièces'),
           const Gap(10),
           Row(
             children: PieceStyle.values.map((s) {
@@ -106,7 +106,7 @@ class SettingsScreen extends ConsumerWidget {
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       decoration: BoxDecoration(
                         color: selected
-                            ? AppTheme.primary.withOpacity(0.5)
+                            ? AppTheme.primary.withValues(alpha: 0.5)
                             : AppTheme.surface,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
@@ -153,7 +153,7 @@ class SettingsScreen extends ConsumerWidget {
           const Gap(28),
 
           // ─── Options d'affichage ─────────────────────────────────────────
-          _Section(title: 'Affichage'),
+          const _Section(title: 'Affichage'),
           const Gap(10),
           _SwitchTile(
             icon: Icons.grid_on,
@@ -183,7 +183,7 @@ class SettingsScreen extends ConsumerWidget {
           const Gap(20),
 
           // ─── Options son ─────────────────────────────────────────────────
-          _Section(title: 'Son'),
+          const _Section(title: 'Son'),
           const Gap(10),
           _SwitchTile(
             icon: Icons.volume_up,
@@ -255,11 +255,11 @@ class _SwitchTile extends StatelessWidget {
         subtitle:      subtitle != null
             ? Text(subtitle!,
                 style: TextStyle(
-                    color: Colors.white.withOpacity(0.4), fontSize: 11))
+                    color: Colors.white.withValues(alpha: 0.4), fontSize: 11))
             : null,
         value:         value,
         onChanged:     (_) => onToggle(),
-        activeColor:   AppTheme.accent,
+        activeThumbColor:   AppTheme.accent,
         shape:         RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12)),
       ),

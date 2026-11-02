@@ -98,7 +98,7 @@ class _OnlineGameScreenState extends ConsumerState<OnlineGameScreen> {
           // ─── Adversaire déconnecté ──────────────────────────────────────
           if (!state.opponentConnected)
             Container(
-              color: Colors.orange.withOpacity(0.3),
+              color: Colors.orange.withValues(alpha: 0.3),
               padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
               child: const Row(
                 children: [
@@ -113,7 +113,7 @@ class _OnlineGameScreenState extends ConsumerState<OnlineGameScreen> {
           // ─── Attente d'adversaire ───────────────────────────────────────
           if (state.isWaiting)
             Container(
-              color: AppTheme.primary.withOpacity(0.3),
+              color: AppTheme.primary.withValues(alpha: 0.3),
               padding: const EdgeInsets.all(12),
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -277,7 +277,7 @@ class _PlayerBar extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: isActive ? AppTheme.primary.withOpacity(0.3) : Colors.transparent,
+      color: isActive ? AppTheme.primary.withValues(alpha: 0.3) : Colors.transparent,
       child: Row(
         children: [
           Container(

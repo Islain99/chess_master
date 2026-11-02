@@ -51,7 +51,7 @@ class AnalysisScreen extends ConsumerWidget {
               'L\'analyse prend environ 1-2 minutes.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                  color: Colors.white.withOpacity(0.5), fontSize: 14),
+                  color: Colors.white.withValues(alpha: 0.5), fontSize: 14),
             ),
             const Gap(32),
             ElevatedButton.icon(
@@ -104,7 +104,7 @@ class AnalysisScreen extends ConsumerWidget {
             Text(
               'Stockfish évalue chaque position à profondeur 15.',
               style:
-                  TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 12),
+                  TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 12),
             ),
           ],
         ),
@@ -141,7 +141,7 @@ class AnalysisScreen extends ConsumerWidget {
           Text(
             'Profondeur moteur : ${s.engineDepth ?? 15}',
             style: TextStyle(
-                color: Colors.white.withOpacity(0.35), fontSize: 11),
+                color: Colors.white.withValues(alpha: 0.35), fontSize: 11),
           ),
 
           const Gap(24),
@@ -194,7 +194,7 @@ class _AccuracyCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppTheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: c.withOpacity(0.4)),
+        border: Border.all(color: c.withValues(alpha: 0.4)),
       ),
       child: Column(
         children: [
@@ -267,9 +267,9 @@ class _MoveAnalysisRow extends StatelessWidget {
           SizedBox(
             width: 36,
             child: Text(
-              '${moveNum}${isWhite ? '.' : '…'}',
+              '$moveNum${isWhite ? '.' : '…'}',
               style: TextStyle(
-                  color: Colors.white.withOpacity(0.35), fontSize: 12),
+                  color: Colors.white.withValues(alpha: 0.35), fontSize: 12),
             ),
           ),
           SizedBox(
@@ -292,7 +292,7 @@ class _MoveAnalysisRow extends StatelessWidget {
           if (loss > 0)
             Text('−${loss.toInt()}cp',
                 style: TextStyle(
-                    color: Colors.white.withOpacity(0.35), fontSize: 11)),
+                    color: Colors.white.withValues(alpha: 0.35), fontSize: 11)),
           const Gap(8),
           SizedBox(
             width: 50,

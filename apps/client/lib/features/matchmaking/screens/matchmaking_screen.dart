@@ -4,7 +4,6 @@ import 'package:gap/gap.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../auth/screens/login_screen.dart';
-import '../../multiplayer/providers/multiplayer_provider.dart';
 import '../../multiplayer/screens/online_game_screen.dart';
 import '../providers/matchmaking_provider.dart';
 
@@ -96,7 +95,7 @@ class _MatchmakingScreenState extends ConsumerState<MatchmakingScreen> {
           const Gap(6),
           Text('Appariement par classement Elo',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white.withOpacity(0.45), fontSize: 13)),
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 13)),
           const Gap(36),
 
           // ─── Sélection de cadence ──────────────────────────────────────
@@ -114,10 +113,10 @@ class _MatchmakingScreenState extends ConsumerState<MatchmakingScreen> {
                   duration: const Duration(milliseconds: 180),
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: selected ? AppTheme.primary.withOpacity(0.5) : AppTheme.surface,
+                    color: selected ? AppTheme.primary.withValues(alpha: 0.5) : AppTheme.surface,
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: selected ? AppTheme.accent : Colors.white.withOpacity(0.08),
+                      color: selected ? AppTheme.accent : Colors.white.withValues(alpha: 0.08),
                       width: selected ? 1.5 : 1,
                     ),
                   ),
@@ -133,7 +132,7 @@ class _MatchmakingScreenState extends ConsumerState<MatchmakingScreen> {
                                   color: Colors.white, fontWeight: FontWeight.w600)),
                           Text(c.$3,
                               style: TextStyle(
-                                  color: Colors.white.withOpacity(0.45), fontSize: 12)),
+                                  color: Colors.white.withValues(alpha: 0.45), fontSize: 12)),
                         ],
                       ),
                       const Spacer(),
@@ -189,7 +188,7 @@ class _MatchmakingScreenState extends ConsumerState<MatchmakingScreen> {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                        color: AppTheme.accent.withOpacity(0.4),
+                        color: AppTheme.accent.withValues(alpha: 0.4),
                         blurRadius: 20,
                         spreadRadius: 5),
                   ],
@@ -202,8 +201,8 @@ class _MatchmakingScreenState extends ConsumerState<MatchmakingScreen> {
             ),
 
             const Gap(32),
-            Text('Recherche en cours…',
-                style: const TextStyle(
+            const Text('Recherche en cours…',
+                style: TextStyle(
                     color: Colors.white,
                     fontSize: 20,
                     fontWeight: FontWeight.w600)),
@@ -212,7 +211,7 @@ class _MatchmakingScreenState extends ConsumerState<MatchmakingScreen> {
               mm.elo != null
                   ? 'Elo ${mm.elo} · ${_timeControlLabel(mm.timeControl)}'
                   : _timeControlLabel(mm.timeControl),
-              style: TextStyle(color: Colors.white.withOpacity(0.55), fontSize: 14),
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 14),
             ),
 
             const Gap(24),
@@ -233,7 +232,7 @@ class _MatchmakingScreenState extends ConsumerState<MatchmakingScreen> {
             const Gap(8),
             Text('Plage Elo : ±${_eloRange(mm.waitTime)} pts',
                 style: TextStyle(
-                    color: Colors.white.withOpacity(0.35), fontSize: 12)),
+                    color: Colors.white.withValues(alpha: 0.35), fontSize: 12)),
 
             const Gap(40),
             OutlinedButton.icon(
@@ -309,7 +308,7 @@ class _LoginRequired extends StatelessWidget {
               Text('Le matchmaking nécessite un compte pour suivre votre classement Elo.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                      color: Colors.white.withOpacity(0.55), fontSize: 14)),
+                      color: Colors.white.withValues(alpha: 0.55), fontSize: 14)),
               const Gap(32),
               ElevatedButton(
                 onPressed: onLogin,

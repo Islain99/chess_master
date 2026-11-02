@@ -4,10 +4,12 @@
   "description": "Microservice Stockfish pour le jeu d'échecs multiplateforme",
   "private": true,
   "scripts": {
+    "prebuild": "node scripts/sync-schema.js",
     "build": "nest build",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
-    "lint": "eslint \"src/**/*.ts\""
+    "lint": "eslint \"src/**/*.ts\"",
+    "prisma:sync": "node scripts/sync-schema.js --write"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.0",

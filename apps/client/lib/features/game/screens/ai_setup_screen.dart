@@ -114,7 +114,7 @@ class _AiSetupScreenState extends ConsumerState<AiSetupScreen> {
                           border: Border.all(
                             color: selected
                                 ? AppTheme.accent
-                                : Colors.white.withOpacity(0.1),
+                                : Colors.white.withValues(alpha: 0.1),
                           ),
                         ),
                         child: Column(
@@ -126,7 +126,7 @@ class _AiSetupScreenState extends ConsumerState<AiSetupScreen> {
                             Text(c.$3,
                                 style: TextStyle(
                                     fontSize: 11,
-                                    color: Colors.white.withOpacity(0.5))),
+                                    color: Colors.white.withValues(alpha: 0.5))),
                           ],
                         ),
                       ),
@@ -249,13 +249,13 @@ class _LevelCard extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: isSelected
-                ? AppTheme.primary.withOpacity(0.6)
+                ? AppTheme.primary.withValues(alpha: 0.6)
                 : AppTheme.surface,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: isSelected
                   ? AppTheme.accent
-                  : Colors.white.withOpacity(0.08),
+                  : Colors.white.withValues(alpha: 0.08),
               width: isSelected ? 1.5 : 1,
             ),
           ),
@@ -286,7 +286,7 @@ class _LevelCard extends StatelessWidget {
                           ),
                           child: Text(level.engine,
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.7),
+                                color: Colors.white.withValues(alpha: 0.7),
                                 fontSize: 10,
                               )),
                         ),
@@ -295,7 +295,7 @@ class _LevelCard extends StatelessWidget {
                     const Gap(3),
                     Text(level.description,
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.5),
+                          color: Colors.white.withValues(alpha: 0.5),
                           fontSize: 12,
                         )),
                   ],
@@ -334,7 +334,7 @@ class _EloSlider extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppTheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -364,8 +364,8 @@ class _EloSlider extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('800', style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 11)),
-              Text('3000', style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 11)),
+              Text('800', style: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 11)),
+              Text('3000', style: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 11)),
             ],
           ),
         ],

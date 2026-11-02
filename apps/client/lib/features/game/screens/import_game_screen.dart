@@ -72,7 +72,7 @@ class _ImportGameScreenState extends ConsumerState<ImportGameScreen>
             ),
             decoration: InputDecoration(
               hintText: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
-              hintStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 12),
+              hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 12),
               filled: true,
               fillColor: AppTheme.surface,
               border: OutlineInputBorder(
@@ -114,7 +114,7 @@ class _ImportGameScreenState extends ConsumerState<ImportGameScreen>
               ),
               decoration: InputDecoration(
                 hintText: '[Event "Partie"]\n[Result "*"]\n\n1. e4 e5 2. Nf3...',
-                hintStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 11),
+                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 11),
                 filled: true,
                 fillColor: AppTheme.surface,
                 border: OutlineInputBorder(

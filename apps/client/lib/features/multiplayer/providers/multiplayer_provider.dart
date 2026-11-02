@@ -6,7 +6,6 @@ import '../../auth/providers/auth_provider.dart';
 import '../../board/models/board_position.dart';
 import '../../board/models/chess_move.dart';
 import '../../game/models/game_state.dart';
-import '../../game/providers/game_provider.dart';
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 

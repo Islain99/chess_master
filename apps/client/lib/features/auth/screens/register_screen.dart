@@ -82,7 +82,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             Text(
               'En créant un compte, vous acceptez d\'utiliser cette\napplication à des fins de test et d\'apprentissage.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 11),
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 11),
             ),
           ],
         ),
@@ -113,7 +113,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         fillColor: AppTheme.surface,
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),

@@ -98,9 +98,9 @@ class _MoveChip extends StatelessWidget {
           : EdgeInsets.zero,
       decoration: isLast
           ? BoxDecoration(
-              color: AppTheme.accent.withOpacity(0.25),
+              color: AppTheme.accent.withValues(alpha: 0.25),
               borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: AppTheme.accent.withOpacity(0.6)),
+              border: Border.all(color: AppTheme.accent.withValues(alpha: 0.6)),
             )
           : null,
       child: Text(

@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import '../config/api_config.dart';
 
@@ -24,10 +23,13 @@ class SocketService {
   void connectGame({String? token}) {
     _gameSocket?.disconnect();
     _gameSocket = io.io(
-      ApiConfig.wsUrl,
+      // Sprint 14 : socket_io_client 2.x n'a pas de setNamespace() — le
+      // namespace fait partie de l'URL. enableForceNew() évite de réutiliser
+      // un Manager en cache avec l'ancien token.
+      '${ApiConfig.wsUrl}/game',
       io.OptionBuilder()
           .setTransports(['websocket'])
-          .setNamespace('/game')
+          .enableForceNew()
           .setAuth({'token': token ?? ''})
           .enableAutoConnect()
           .enableReconnection()
@@ -49,8 +51,11 @@ class SocketService {
 
   void onGame(String event, JsonCallback callback) {
     _gameSocket?.on(event, (raw) {
-      if (raw is Map) callback(Map<String, dynamic>.from(raw));
-      else if (raw == null) callback({});
+      if (raw is Map) {
+        callback(Map<String, dynamic>.from(raw));
+      } else if (raw == null) {
+        callback({});
+      }
     });
   }
 
@@ -65,10 +70,13 @@ class SocketService {
   void connectLobby({String? token}) {
     _lobbySocket?.disconnect();
     _lobbySocket = io.io(
-      ApiConfig.wsUrl,
+      // Sprint 14 : socket_io_client 2.x n'a pas de setNamespace() — le
+      // namespace fait partie de l'URL. enableForceNew() évite de réutiliser
+      // un Manager en cache avec l'ancien token.
+      '${ApiConfig.wsUrl}/lobby',
       io.OptionBuilder()
           .setTransports(['websocket'])
-          .setNamespace('/lobby')
+          .enableForceNew()
           .setAuth({'token': token ?? ''})
           .enableAutoConnect()
           .build(),
@@ -87,8 +95,11 @@ class SocketService {
 
   void onLobby(String event, JsonCallback callback) {
     _lobbySocket?.on(event, (raw) {
-      if (raw is Map) callback(Map<String, dynamic>.from(raw));
-      else if (raw == null) callback({});
+      if (raw is Map) {
+        callback(Map<String, dynamic>.from(raw));
+      } else if (raw == null) {
+        callback({});
+      }
     });
   }
 

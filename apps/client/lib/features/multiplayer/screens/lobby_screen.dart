@@ -132,7 +132,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen>
             decoration: InputDecoration(
               hintText: 'XXXXXX',
               hintStyle: TextStyle(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 fontSize: 28,
                 letterSpacing: 8,
               ),
@@ -227,7 +227,7 @@ class _WaitingView extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: AppTheme.surface,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppTheme.accent.withOpacity(0.5)),
+                  border: Border.all(color: AppTheme.accent.withValues(alpha: 0.5)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,

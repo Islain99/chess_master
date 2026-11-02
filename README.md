@@ -111,12 +111,18 @@ AI_ENGINE_URL=http://localhost:3001
 | 10 | Rate limiting HTTP/WS · GlobalExceptionFilter |
 | 11 | Kubernetes manifests · Helm chart · CI/CD complet |
 | 12 | Tests supplémentaires · cache Elo · stabilisation |
+| 13 | Client buildable : bootstrap des 6 plateformes · tests Flutter · CI Flutter · image Docker Web |
+| 14 | Client compilable (15 erreurs corrigées) · suppression du code mort · schéma Prisma unique |
 
 ## Tests
 
 ```bash
+cd apps/client
+flutter analyze       # 0 problème
+flutter test          # tests unitaires et de widget
+
 cd apps/api
-npm run test          # 87 tests unitaires
+npm run test          # 75 tests unitaires
 npm run test:e2e      # tests end-to-end (nécessite Postgres)
 npm run lint          # ESLint TypeScript
 npm run build         # compilation TypeScript
