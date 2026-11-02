@@ -60,6 +60,13 @@ spec:
                   name: {{ .Release.Name }}-secrets
                   key: facebookAppSecret
                   optional: true
+            # Sprint 16 : compte de service FCM facultatif (push désactivé sans lui)
+            - name: FCM_SERVICE_ACCOUNT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-secrets
+                  key: fcmServiceAccount
+                  optional: true
             - name: AI_ENGINE_URL
               value: "http://{{ .Release.Name }}-ai-engine:3001"
           livenessProbe:

@@ -1,0 +1,16 @@
+{
+  "name": "chess-web-push-sw",
+  "private": true,
+  "description": "Sprint 16 — service worker FCM du client Web (voir firebase-messaging-sw.ts)",
+  "scripts": {
+    "build": "esbuild firebase-messaging-sw.ts --bundle --minify --format=iife --target=es2020 --outfile=dist/firebase-messaging-sw.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "firebase": "13.1.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "typescript": "^5.5.4"
+  }
+}

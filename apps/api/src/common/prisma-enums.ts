@@ -26,6 +26,7 @@ export {
   Color,
   NotificationType,
   QueueStatus,
+  PushPlatform, // sprint 16
 } from '@prisma/client';
 
 /** Modèle Game généré (utilisé pour typer les conversions dans GamesService). */

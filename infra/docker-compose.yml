@@ -68,6 +68,9 @@ services:
       APPLE_ANDROID_PACKAGE: ${APPLE_ANDROID_PACKAGE:-com.islain99.chess_client}
       FACEBOOK_APP_ID: ${FACEBOOK_APP_ID:-}
       FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET:-}
+      # Sprint 16 — notifications push FCM (vide = désactivé)
+      FCM_SERVICE_ACCOUNT: ${FCM_SERVICE_ACCOUNT:-}
+      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-}
     ports:
       - "3000:3000"
     depends_on:

@@ -114,6 +114,30 @@ class ApiClient {
     return _parseResponse(response);
   }
 
+  /// Sprint 16 : PATCH (ex. /notifications/:id/read).
+  Future<Map<String, dynamic>> patch(
+    String path, [
+    Map<String, dynamic> body = const {},
+  ]) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}$path');
+    final response = await _client
+        .patch(uri, headers: _headers(), body: jsonEncode(body))
+        .timeout(ApiConfig.receiveTimeout);
+    return _parseResponse(response);
+  }
+
+  /// Sprint 16 : DELETE avec corps JSON facultatif (ex. /notifications/devices).
+  Future<Map<String, dynamic>> delete(
+    String path, [
+    Map<String, dynamic>? body,
+  ]) async {
+    final request = http.Request('DELETE', Uri.parse('${ApiConfig.baseUrl}$path'))
+      ..headers.addAll(_headers());
+    if (body != null) request.body = jsonEncode(body);
+    final streamed = await _client.send(request).timeout(ApiConfig.receiveTimeout);
+    return _parseResponse(await http.Response.fromStream(streamed));
+  }
+
   // ─── Internals ────────────────────────────────────────────────────────────
 
   Map<String, String> _headers({String accept = 'application/json'}) => {
@@ -123,7 +147,9 @@ class ApiClient {
   };
 
   Map<String, dynamic> _parseResponse(http.Response response) {
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    // Sprint 16 : 204 No Content (logout, appareils push…) → corps vide.
+    final decoded = response.body.isEmpty ? null : jsonDecode(response.body);
+    final body = decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
     if (response.statusCode >= 200 && response.statusCode < 300) return body;
     throw ApiException(
       statusCode: response.statusCode,

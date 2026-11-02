@@ -76,6 +76,14 @@ enum NotificationType {
   SYSTEM
 }
 
+/// Sprint 16 : plateforme d'un jeton de notification push (FCM).
+enum PushPlatform {
+  ANDROID
+  IOS
+  MACOS
+  WEB
+}
+
 enum QueueStatus {
   WAITING
   MATCHED
@@ -104,6 +112,7 @@ model User {
   gamesAsBlack       Game[]                  @relation("BlackPlayer")
   notifications      Notification[]
   matchmakingEntries MatchmakingQueueEntry[]
+  pushDevices        PushDevice[]
 
   @@unique([authProvider, providerId])
   @@index([email])
@@ -250,4 +259,19 @@ model Notification {
   createdAt DateTime         @default(now())
 
   @@index([userId, isRead])
+}
+
+/// Sprint 16 : appareil abonné aux notifications push (Firebase Cloud Messaging).
+/// Un même jeton FCM ne peut appartenir qu'à un seul compte (appareil partagé :
+/// le dernier compte connecté le récupère).
+model PushDevice {
+  id         String       @id @default(uuid())
+  userId     String
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token      String       @unique
+  platform   PushPlatform
+  createdAt  DateTime     @default(now())
+  lastSeenAt DateTime     @default(now())
+
+  @@index([userId])
 }

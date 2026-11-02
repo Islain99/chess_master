@@ -57,7 +57,9 @@ class NotificationsState {
 
 final notificationsProvider =
     StateNotifierProvider<NotificationsNotifier, NotificationsState>((ref) {
-  final client = ref.read(apiClientProvider);
+  // Sprint 16 : watch (et non read) → le notifier est recréé à la connexion /
+  // déconnexion, au lieu de garder un client API sans jeton.
+  final client = ref.watch(apiClientProvider);
   return NotificationsNotifier(client);
 });
 
@@ -92,7 +94,8 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
 
   Future<void> markRead(String id) async {
     try {
-      await _api.post('/notifications/$id/read', {});
+      // Sprint 16 : l'API expose PATCH (le POST d'origine renvoyait 404).
+      await _api.patch('/notifications/$id/read');
       state = state.copyWith(
         items: state.items
             .map((n) => n.id == id ? n.copyWith(isRead: true) : n)
@@ -104,7 +107,7 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
 
   Future<void> markAllRead() async {
     try {
-      await _api.post('/notifications/read-all', {});
+      await _api.patch('/notifications/read-all');
       state = state.copyWith(
         items: state.items.map((n) => n.copyWith(isRead: true)).toList(),
         unreadCount: 0,

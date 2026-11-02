@@ -1,8 +1,12 @@
 import {
+  Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Param,
   Patch,
+  Post,
   Query,
   Req,
   UseGuards,
@@ -10,12 +14,41 @@ import {
 import { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import type { RequestUser } from '../auth/strategies/jwt.strategy';
+import { RegisterPushDeviceDto, UnregisterPushDeviceDto } from './dto/push-device.dto';
 import { NotificationsService } from './notifications.service';
+import { PushService } from './push/push.service';
 
 @Controller('notifications')
 @UseGuards(JwtAuthGuard)
 export class NotificationsController {
-  constructor(private readonly notifications: NotificationsService) {}
+  constructor(
+    private readonly notifications: NotificationsService,
+    private readonly push: PushService,
+  ) {}
+
+  // ─── Appareils push (sprint 16) ────────────────────────────────────────────
+
+  /** POST /notifications/devices — abonner cet appareil aux notifications push */
+  @Post('devices')
+  @HttpCode(204)
+  async registerDevice(@Req() req: Request, @Body() dto: RegisterPushDeviceDto) {
+    const user = req.user as RequestUser;
+    await this.push.registerDevice(user.userId, dto.token, dto.platform);
+  }
+
+  /** DELETE /notifications/devices — désabonner cet appareil (déconnexion) */
+  @Delete('devices')
+  @HttpCode(204)
+  async unregisterDevice(@Req() req: Request, @Body() dto: UnregisterPushDeviceDto) {
+    const user = req.user as RequestUser;
+    await this.push.unregisterDevice(user.userId, dto.token);
+  }
+
+  /** GET /notifications/push-status — le serveur sait-il envoyer des push ? */
+  @Get('push-status')
+  pushStatus() {
+    return { enabled: this.push.enabled };
+  }
 
   /** GET /notifications — liste paginée */
   @Get()

@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/http/api_client.dart';
 import '../models/auth_state.dart';
 import '../services/oauth_service.dart';
+import '../../notifications/services/push_service.dart';
 
 // ─── État ─────────────────────────────────────────────────────────────────────
 
@@ -24,11 +27,18 @@ class AuthState {
 
 final authProvider =
     StateNotifierProvider<AuthNotifier, AsyncValue<AuthState>>((ref) {
-  return AuthNotifier(ref.read(rawApiClientProvider), ref.read(oauthServiceProvider));
+  return AuthNotifier(
+    ref.read(rawApiClientProvider),
+    ref.read(oauthServiceProvider),
+    ref.read(pushServiceProvider),
+  );
 });
 
 /// Sprint 15 : SDK Google / Apple / Facebook (surchargeable dans les tests).
 final oauthServiceProvider = Provider<OAuthService>((ref) => OAuthService());
+
+/// Sprint 16 : notifications push FCM (surchargeable dans les tests).
+final pushServiceProvider = Provider<PushService>((ref) => PushService());
 
 /// Provider d'un ApiClient sans token (pour les appels auth).
 final rawApiClientProvider = Provider<ApiClient>((ref) => ApiClient());
@@ -42,12 +52,13 @@ final apiClientProvider = Provider<ApiClient>((ref) {
 // ─── Notifier ─────────────────────────────────────────────────────────────────
 
 class AuthNotifier extends StateNotifier<AsyncValue<AuthState>> {
-  AuthNotifier(this._api, [this._oauth]) : super(const AsyncValue.loading()) {
+  AuthNotifier(this._api, [this._oauth, this._push]) : super(const AsyncValue.loading()) {
     _restoreSession();
   }
 
   final ApiClient _api;
   final OAuthService? _oauth;
+  final PushService? _push;
 
   // ─── Restauration de session ───────────────────────────────────────────────
 
@@ -80,6 +91,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<AuthState>> {
       final userData = await authedApi.get('/auth/me');
       final user = AuthUser.fromJson(userData);
       state = AsyncValue.data(AuthState(user: user, tokens: tokens));
+      _registerPush(tokens);
     } catch (_) {
       await _clearStorage();
       state = const AsyncValue.data(AuthState());
@@ -149,6 +161,8 @@ class AuthNotifier extends StateNotifier<AsyncValue<AuthState>> {
 
     try {
       final authedApi = ApiClient(accessToken: current!.tokens!.accessToken);
+      // Sprint 16 : désabonner l'appareil tant que le jeton d'accès est valide.
+      await _push?.unregister(authedApi);
       await authedApi.post('/auth/logout', {
         'refreshToken': current.tokens!.refreshToken,
       });
@@ -193,6 +207,15 @@ class AuthNotifier extends StateNotifier<AsyncValue<AuthState>> {
 
     await _saveTokens(tokens);
     state = AsyncValue.data(AuthState(user: user, tokens: tokens));
+    _registerPush(tokens);
+  }
+
+  /// Sprint 16 : abonne l'appareil aux notifications push, en arrière-plan
+  /// (la demande de permission ne doit pas retarder l'ouverture de session).
+  void _registerPush(AuthTokens tokens) {
+    final push = _push;
+    if (push == null || !push.isAvailable) return;
+    unawaited(push.register(ApiClient(accessToken: tokens.accessToken)));
   }
 
   Future<void> _saveTokens(AuthTokens tokens) async {

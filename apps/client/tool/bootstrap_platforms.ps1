@@ -87,4 +87,16 @@ Add-BeforeLast 'ios/Runner/Info.plist' '</dict>' `
   ("`t<key>NSAppTransportSecurity</key>$nl`t<dict>$nl`t`t<key>NSAllowsLocalNetworking</key>$nl`t`t<true/>$nl`t</dict>$nl") `
   'NSAppTransportSecurity'
 
+# Sprint 16 : notifications push iOS (réveil par notification distante).
+Add-BeforeLast 'ios/Runner/Info.plist' '</dict>' `
+  ("`t<key>UIBackgroundModes</key>$nl`t<array>$nl`t`t<string>remote-notification</string>$nl`t</array>$nl") `
+  'UIBackgroundModes'
+
+# Sprint 16 : service worker FCM du Web (toujours recopié → mises à jour).
+if ((Test-Path 'web' -PathType Container) -and (Test-Path 'web_push/dist/firebase-messaging-sw.js')) {
+  New-Item -ItemType Directory -Force -Path 'web/push' | Out-Null
+  Copy-Item 'web_push/dist/firebase-messaging-sw.js' 'web/push/firebase-messaging-sw.js' -Force
+  Write-Host '  ✓ web/push/firebase-messaging-sw.js'
+}
+
 Write-Host '✔ Plateformes prêtes. Étape suivante : flutter pub get ; flutter run -d windows'

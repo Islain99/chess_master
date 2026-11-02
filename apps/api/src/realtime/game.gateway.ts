@@ -11,6 +11,10 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { GamesService } from '../games/games.service';
+import {
+  GameForNotification,
+  NotificationsService,
+} from '../notifications/notifications.service';
 import { WsRateLimiter } from './ws-rate-limiter';
 
 /** Informations de connexion associées à chaque socket. */
@@ -47,10 +51,49 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private readonly disconnectTimers = new Map<string, NodeJS.Timeout>();
   private readonly moveLimiter = new WsRateLimiter(5_000, 20);
 
+  /** Sprint 16 : gameId → joueurs (pour savoir qui prévenir après un coup). */
+  private readonly players = new Map<string, { white: string | null; black: string | null }>();
+
   constructor(
     private readonly gamesService: GamesService,
     private readonly jwtService: JwtService,
+    private readonly notifications: NotificationsService,
   ) {}
+
+  // ──────────────────────────────────────────────
+  // Notifications (sprint 16)
+  // ──────────────────────────────────────────────
+
+  /** Vrai si l'utilisateur a un socket ouvert sur cette partie. */
+  private isWatching(gameId: string, userId: string): boolean {
+    for (const conn of this.connections.values()) {
+      if (conn.gameId === gameId && conn.userId === userId) return true;
+    }
+    return false;
+  }
+
+  /** Lance les notifications sans bloquer ni faire échouer le traitement du coup. */
+  private notifySafely(task: () => Promise<unknown>) {
+    task().catch((err) => this.logger.warn(`Notification ignorée : ${err}`));
+  }
+
+  /** Joueurs d'une partie : cache rempli au game:join, sinon lecture en base. */
+  private async gamePlayers(gameId: string) {
+    let players = this.players.get(gameId);
+    if (!players) {
+      const state = await this.gamesService.findById(gameId);
+      players = { white: state.whitePlayerId ?? null, black: state.blackPlayerId ?? null };
+      this.players.set(gameId, players);
+    }
+    return { id: gameId, whitePlayerId: players.white, blackPlayerId: players.black };
+  }
+
+  private notifyEnded(game: GameForNotification) {
+    this.players.delete(game.id); // partie terminée : plus besoin du cache
+    this.notifySafely(() =>
+      this.notifications.notifyGameEnded(game, (uid) => this.isWatching(game.id, uid)),
+    );
+  }
 
   // ──────────────────────────────────────────────
   // Connexion / déconnexion
@@ -85,7 +128,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         try {
           const state = await this.gamesService.findById(conn.gameId!);
           if (state.status === 'ONGOING') {
-            await this.gamesService.resign(
+            const ended = await this.gamesService.resign(
               conn.gameId!,
               conn.color ?? 'white',
             );
@@ -93,6 +136,8 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
               result: conn.color === 'white' ? 'BLACK_WIN' : 'WHITE_WIN',
               reason: 'ABANDONED',
             });
+            // Sprint 16 : le joueur resté prévenu même s'il a fermé l'appli entre-temps.
+            this.notifyEnded({ ...ended, resultReason: 'ABANDONED' });
           }
         } catch (err) {
           this.logger.warn(`Forfait impossible : ${err}`);
@@ -132,6 +177,10 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     try {
       const state = await this.gamesService.findById(data.gameId);
+      this.players.set(data.gameId, {
+        white: (state as any).whitePlayerId ?? null,
+        black: (state as any).blackPlayerId ?? null,
+      });
 
       // Déterminer la couleur du joueur connecté
       if (conn.userId) {
@@ -179,6 +228,18 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
           result: result.game.result,
           reason: result.game.resultReason,
         });
+        this.notifySafely(async () =>
+          this.notifyEnded({ ...(await this.gamePlayers(data.gameId)), ...result.game }),
+        );
+      } else {
+        // Sprint 16 : « À vous de jouer » si l'adversaire n'est pas devant la partie.
+        this.notifySafely(async () =>
+          this.notifications.notifyTurn(
+            { ...(await this.gamePlayers(data.gameId)), fen: result.game.fen },
+            result.move?.san,
+            (uid) => this.isWatching(data.gameId, uid),
+          ),
+        );
       }
     } catch (err: any) {
       // Coup illégal → renvoyer uniquement à son auteur
@@ -204,6 +265,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         result: game.result,
         reason: game.resultReason,
       });
+      this.notifyEnded(game);
     } catch (err) {
       this.logger.warn(`game:resign error : ${err}`);
     }
@@ -233,11 +295,12 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {
     if (data.accept) {
       try {
-        await this.gamesService.acceptDraw(data.gameId);
+        const game = await this.gamesService.acceptDraw(data.gameId);
         this.server.to(`game:${data.gameId}`).emit('game:ended', {
           result: 'DRAW',
           reason: 'DRAW_AGREEMENT',
         });
+        this.notifyEnded(game);
       } catch (err) {
         this.logger.warn(`game:drawResponse error : ${err}`);
       }

@@ -13,6 +13,7 @@ import { Server, Socket } from 'socket.io';
 import { MatchmakingService } from '../matchmaking/matchmaking.service';
 import { RatingsService }     from '../ratings/ratings.service';
 import { RoomsService }       from '../rooms/rooms.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { TimeControlCategory } from '../common/prisma-enums';
 
 /**
@@ -36,6 +37,7 @@ export class LobbyGateway implements OnGatewayConnection, OnGatewayInit {
     private readonly matchmaking: MatchmakingService,
     private readonly ratings:     RatingsService,
     private readonly jwtService:  JwtService,
+    private readonly notifications: NotificationsService, // sprint 16
   ) {}
 
   afterInit() {
@@ -172,6 +174,11 @@ export class LobbyGateway implements OnGatewayConnection, OnGatewayInit {
       this.server
         .to(`lobby:waiting:${data.roomCode}`)
         .emit('lobby:opponentJoined', { gameId: game.id });
+
+      // Sprint 16 : notification (et push) à l'hôte, qui a pu quitter l'appli
+      this.notifications
+        .notifyRoomJoined(game)
+        .catch((err) => this.logger.warn(`Notification ignorée : ${err}`));
     } catch (err: any) {
       client.emit('lobby:error', { message: err?.message ?? 'Code invalide.' });
     }

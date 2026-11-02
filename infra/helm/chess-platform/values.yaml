@@ -29,6 +29,8 @@ api:
     APPLE_CLIENT_IDS:      ""   # bundle ID iOS/macOS + Services ID (Android/Web)
     APPLE_ANDROID_PACKAGE: "com.islain99.chess_client"
     FACEBOOK_APP_ID:       ""
+    # ─── Push (sprint 16) : lien ouvert au clic sur une notification Web
+    PUBLIC_WEB_URL:        "https://chess.example.com"
 
 aiEngine:
   enabled:  true
@@ -79,3 +81,4 @@ secrets:
   databaseUrl:      "postgresql://chess:chess@postgres:5432/chess"
   redisUrl:         "redis://redis:6379"
   facebookAppSecret: ""   # sprint 15 — App Secret Meta (--set secrets.facebookAppSecret=…)
+  fcmServiceAccount: ""   # sprint 16 — JSON du compte de service Firebase, en base64

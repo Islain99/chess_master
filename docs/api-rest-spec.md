@@ -149,6 +149,28 @@ Body : `{ "timeControl": "bullet"|"blitz"|"rapid"|"classical" }`
 
 ---
 
+## Notifications push (`/notifications/devices`) — authentifié · sprint 16
+
+### POST /notifications/devices
+Body : `{ "token": string, "platform": "ANDROID" | "IOS" | "MACOS" | "WEB" }`. `token` est l'identifiant d'installation Firebase (FID) reçu par `FirebaseMessaging.onRegistered`.
+204. Un même jeton n'appartient qu'à un compte : sur un appareil partagé, il passe au dernier compte connecté. Au plus 10 appareils par compte, les moins récents sont retirés.
+
+### DELETE /notifications/devices
+Body : `{ "token": string }` → 204. À appeler avant `POST /auth/logout`.
+
+### GET /notifications/push-status
+200 : `{ "enabled": boolean }`. Indique si le serveur est configuré pour FCM.
+
+### Envois automatiques
+
+| Événement | Type | Destinataire | Push |
+|---|---|---|---|
+| Coup joué en ligne | `YOUR_TURN` | joueur au trait | seulement s'il n'a pas la partie ouverte (aucune notification sinon) |
+| Fin de partie (mat, nulle, abandon, temps, déconnexion) | `GAME_ENDED` | chaque joueur humain | seulement à ceux qui n'ont plus la partie ouverte |
+| Adversaire entré dans une salle privée | `GAME_INVITE` | hôte | oui |
+
+Les jetons signalés invalides par FCM (application désinstallée) sont supprimés automatiquement.
+
 ## Leaderboard (`/leaderboard`) — authentifié
 
 ### GET /leaderboard?timeControl=&page=&pageSize=

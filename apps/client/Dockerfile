@@ -22,11 +22,9 @@ RUN flutter pub get
 
 COPY . .
 
-# Si le dossier web/ n'est pas encore versionné, on le génère à la volée
-# (même réglages que tool/bootstrap_platforms.sh).
-RUN if [ ! -d web ]; then \
-      flutter create --project-name chess_client --org com.islain99 --platforms=web . ; \
-    fi
+# Génère web/ s'il n'est pas versionné et copie le service worker push
+# (sprint 16) — mêmes réglages que le développement local.
+RUN bash tool/bootstrap_platforms.sh web
 
 ARG API_URL=http://localhost:3000/api/v1
 ARG WS_URL=http://localhost:3000

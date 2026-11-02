@@ -49,8 +49,10 @@ flutter run -d <emulateur> --dart-define=API_URL=http://10.0.2.2:3000/api/v1 --d
 | `GOOGLE_CLIENT_ID`, `GOOGLE_SERVER_CLIENT_ID` | vide | Connexion Google (sprint 15) |
 | `APPLE_SERVICE_ID`, `APPLE_REDIRECT_URI` | vide | Connexion Apple sur Android et le Web |
 | `FACEBOOK_APP_ID` | vide | Connexion Facebook sur le Web |
+| `FIREBASE_API_KEY`, `FIREBASE_APP_ID`, `FIREBASE_MESSAGING_SENDER_ID`, `FIREBASE_PROJECT_ID` | vide | Notifications push (sprint 16) |
+| `FIREBASE_VAPID_KEY` | vide | Notifications push sur le Web |
 
-Une variable OAuth vide masque le bouton correspondant. Le guide [docs/oauth-setup.md](../../docs/oauth-setup.md) détaille la configuration des consoles Google, Apple et Meta, ainsi que des projets natifs.
+Une variable OAuth vide masque le bouton correspondant, et sans Firebase les notifications restent uniquement dans l'application (voir [docs/push-setup.md](../../docs/push-setup.md)). Le guide [docs/oauth-setup.md](../../docs/oauth-setup.md) détaille la configuration des consoles Google, Apple et Meta, ainsi que des projets natifs.
 
 ## 3. Qualité
 

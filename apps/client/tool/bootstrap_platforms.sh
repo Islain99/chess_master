@@ -85,4 +85,19 @@ insert_before_last ios/Runner/Info.plist "</dict>" \
 	</dict>
 ' 'NSAppTransportSecurity'
 
+# Sprint 16 : notifications push iOS (réveil par notification distante).
+insert_before_last ios/Runner/Info.plist "</dict>" \
+  '	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
+' 'UIBackgroundModes'
+
+# Sprint 16 : service worker FCM du Web (toujours recopié → mises à jour).
+if [[ -d web && -f web_push/dist/firebase-messaging-sw.js ]]; then
+  mkdir -p web/push
+  cp web_push/dist/firebase-messaging-sw.js web/push/firebase-messaging-sw.js
+  echo "  ✓ web/push/firebase-messaging-sw.js"
+fi
+
 echo "✔ Plateformes prêtes. Étape suivante : flutter pub get && flutter run -d <device>"

@@ -28,6 +28,10 @@ dependencies:
   flutter_facebook_auth: ^7.3.2
   crypto: ^3.0.6                  # SHA-256 du nonce Apple
 
+  # Notifications push (sprint 16)
+  firebase_core: ^5.1.0
+  firebase_messaging: ^17.0.1
+
   # UI
   google_fonts: ^6.2.1
   gap: ^3.0.1
