@@ -8,6 +8,7 @@ import '../../auth/providers/auth_provider.dart';
 import '../../board/models/board_position.dart';
 import '../../board/models/chess_move.dart';
 import '../models/game_state.dart';
+import '../services/resume_store.dart';
 
 // ─── Providers ────────────────────────────────────────────────────────────────
 
@@ -56,6 +57,25 @@ class GameNotifier extends StateNotifier<AsyncValue<GameState>> {
     _clockTimer = null;
   }
 
+  // ─── Reprise (sprint 18) ───────────────────────────────────────────────────
+
+  /// Recharge une partie locale / IA depuis le serveur (après fermeture de l'appli).
+  Future<void> resumeGame(String gameId) async {
+    state = const AsyncValue.loading();
+    try {
+      final data = await _api.getGame(gameId);
+      state = AsyncValue.data(_fromServerData(data));
+      if (!(state.valueOrNull?.isOver ?? true)) _startClock();
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+    }
+  }
+
+  /// Mémorise la partie en cours pour pouvoir la reprendre plus tard.
+  void _remember(GameState s) {
+    ResumeStore.save(s.isOver ? null : s.gameId).ignore();
+  }
+
   // ─── Création ──────────────────────────────────────────────────────────────
 
   Future<void> createLocalGame({String timeControl = 'RAPID'}) async {
@@ -63,6 +83,7 @@ class GameNotifier extends StateNotifier<AsyncValue<GameState>> {
     try {
       final data = await _api.createGame(mode: 'LOCAL', timeControl: timeControl);
       state = AsyncValue.data(_fromServerData(data));
+      _remember(state.value!);
       _startClock();
     } catch (e, st) {
       state = AsyncValue.error(e, st);
@@ -87,6 +108,7 @@ class GameNotifier extends StateNotifier<AsyncValue<GameState>> {
         aiLevel: aiLevel,
       );
       state = AsyncValue.data(gameState);
+      _remember(gameState);
       _startClock();
     } catch (e, st) {
       state = AsyncValue.error(e, st);

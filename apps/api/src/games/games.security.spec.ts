@@ -255,6 +255,16 @@ describe('GamesService — autorisations des parties en ligne', () => {
 
   // ─── Création ──────────────────────────────────────────────────────────────
 
+  it('sprint 18 : partie IA d\'un joueur connecté rattachée à son compte, LOCAL anonyme', async () => {
+    prisma.game.create.mockImplementation(async ({ data }) => ({ ...onlineGame(), ...data }));
+
+    await service.create({ mode: GameMode.AI, timeControl: TimeControlCategory.RAPID, aiLevel: 3 } as any, { userId: ALICE });
+    expect(prisma.game.create.mock.calls[0][0].data.whitePlayerId).toBe(ALICE);
+
+    await service.create({ mode: GameMode.LOCAL, timeControl: TimeControlCategory.RAPID } as any, { userId: ALICE });
+    expect(prisma.game.create.mock.calls[1][0].data.whitePlayerId).toBeUndefined();
+  });
+
   it.each([GameMode.PRIVATE, GameMode.MATCHMAKING])(
     'POST /games refuse le mode %s (partie en ligne sans joueurs)',
     async (mode) => {

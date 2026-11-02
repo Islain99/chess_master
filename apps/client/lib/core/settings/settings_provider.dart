@@ -44,7 +44,9 @@ class AppSettings {
   );
 }
 
-enum PieceStyle { classic, solid, outline }
+/// Style de rendu des pièces (index persisté : ne pas réordonner, ajouter à la fin).
+/// Sprint 18 : `letters` (R D T F C P) pour l'accessibilité.
+enum PieceStyle { classic, solid, outline, letters }
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
@@ -70,7 +72,8 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     final p = await SharedPreferences.getInstance();
     state = AppSettings(
       boardThemeName:  p.getString(_kTheme)      ?? 'Classique',
-      pieceStyle:      PieceStyle.values[p.getInt(_kPieceStyle) ?? 0],
+      // Sprint 18 : index hors bornes (valeur corrompue) → style par défaut.
+      pieceStyle:      _pieceStyleAt(p.getInt(_kPieceStyle)),
       showCoordinates: p.getBool(_kCoords)        ?? true,
       animateMoves:    p.getBool(_kAnimate)       ?? true,
       showLegalMoves:  p.getBool(_kLegal)         ?? true,
@@ -110,3 +113,8 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     }
   }
 }
+
+PieceStyle _pieceStyleAt(int? index) =>
+    index != null && index >= 0 && index < PieceStyle.values.length
+        ? PieceStyle.values[index]
+        : PieceStyle.classic;

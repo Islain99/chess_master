@@ -116,6 +116,7 @@ AI_ENGINE_URL=http://localhost:3001
 | 15 | Connexion Google · Apple · Facebook (échange de jeton vérifié côté serveur) · enums Prisma réels — voir [docs/oauth-setup.md](docs/oauth-setup.md) |
 | 16 | Notifications push FCM (Android · iOS · macOS · Web) · génération réelle des notifications (tour, fin de partie, salle) — voir [docs/push-setup.md](docs/push-setup.md) |
 | 17 | Sécurité des parties en ligne : jouer / abandonner / accepter la nulle réservé au bon joueur, pendule mesurée par le serveur, Elo à chaque fin de partie classée, forfait réservé aux joueurs |
+| 18 | Lecteur de partie + graphique d'évaluation · reprise de partie · « Mes parties » · thèmes de pièces appliqués · profil et avatars · classification des coups (probabilité de gain) |
 
 ## Tests
 
@@ -125,7 +126,7 @@ flutter analyze       # 0 problème
 flutter test          # tests unitaires et de widget
 
 cd apps/api
-npm run test          # 189 tests unitaires et HTTP
+npm run test          # 217 tests unitaires et HTTP
 npm run test:e2e      # tests end-to-end (nécessite Postgres)
 npm run lint          # ESLint TypeScript
 npm run build         # compilation TypeScript

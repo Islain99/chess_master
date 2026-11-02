@@ -123,6 +123,22 @@ class MultiplayerNotifier extends StateNotifier<AsyncValue<OnlineGameState>> {
     }
   }
 
+  // ─── Reprendre une partie en ligne (sprint 18) ─────────────────────────────
+
+  /// Rejoint une partie existante par son identifiant : partie trouvée par le
+  /// matchmaking, ou partie en cours reprise depuis « Mes parties ». La
+  /// couleur du joueur est fournie par le serveur (game:state).
+  void resumeGame(String gameId) {
+    _ws.disconnectGame();
+    state = AsyncValue.data(OnlineGameState(
+      gameId:       gameId,
+      board:        GameState.initial(),
+      status:       'ongoing',
+      isConnecting: true,
+    ));
+    _connectAndJoin(gameId);
+  }
+
   // ─── Rejoindre une salle ──────────────────────────────────────────────────
 
   Future<bool> joinRoom(String roomCode) async {
@@ -411,7 +427,9 @@ class MultiplayerNotifier extends StateNotifier<AsyncValue<OnlineGameState>> {
     final clocks     = data['clocks'] as Map<String, dynamic>? ?? {};
     final statusStr  = data['status'] as String? ?? 'WAITING';
     final gs         = _parseGameStatus(statusStr);
-    final color      = data['playerColor'] as String? ?? s.playerColor;
+    // Sprint 18 : le serveur envoie « white » / « black », le client attend
+    // « w » / « b » (sinon l'issue affichée était toujours « Défaite »).
+    final color      = normalizeColor(data['playerColor'] as String?) ?? s.playerColor;
 
     return s.copyWith(
       gameId:      data['id'] as String? ?? s.gameId,
@@ -478,3 +496,10 @@ class MultiplayerNotifier extends StateNotifier<AsyncValue<OnlineGameState>> {
     }
   }
 }
+
+/// « white » / « w » → « w », « black » / « b » → « b », autre → null.
+String? normalizeColor(String? color) => switch (color) {
+      'white' || 'w' => 'w',
+      'black' || 'b' => 'b',
+      _ => null,
+    };

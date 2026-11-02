@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../replay/screens/game_replay_screen.dart';
 import 'package:gap/gap.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../board/widgets/chess_board.dart';
@@ -15,6 +16,9 @@ class GameScreen extends ConsumerStatefulWidget {
 }
 
 class _GameScreenState extends ConsumerState<GameScreen> {
+  /// Partie pour laquelle la boîte de fin a déjà été affichée.
+  String? _resultShownFor;
+
   @override
   Widget build(BuildContext context) {
     final asyncState = ref.watch(gameProvider);
@@ -80,7 +84,10 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       });
     }
 
-    if (state.isOver) {
+    // Sprint 18 : une seule boîte de fin de partie par partie (avant, chaque
+    // reconstruction de l'écran en empilait une nouvelle).
+    if (state.isOver && _resultShownFor != state.gameId) {
+      _resultShownFor = state.gameId;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _showResultDialog(context, state);
       });
@@ -231,6 +238,21 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           ],
         ),
         actions: [
+          // Sprint 18 : accès au lecteur de partie + analyse Stockfish
+          if (state.gameId != null)
+            TextButton.icon(
+              icon: const Icon(Icons.insights),
+              label: const Text('Revoir et analyser'),
+              onPressed: () {
+                Navigator.pop(context); // ferme la boîte de dialogue
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => GameReplayScreen(gameId: state.gameId!, flipped: state.isFlipped),
+                  ),
+                );
+              },
+            ),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);

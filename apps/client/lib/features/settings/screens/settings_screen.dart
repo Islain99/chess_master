@@ -4,6 +4,7 @@ import 'package:gap/gap.dart';
 import '../../../core/settings/board_theme.dart';
 import '../../../core/settings/settings_provider.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../board/widgets/chess_piece.dart';
 
 /// Écran des paramètres : thème plateau, style pièces, options UI.
 class SettingsScreen extends ConsumerWidget {
@@ -92,9 +93,10 @@ class SettingsScreen extends ConsumerWidget {
             children: PieceStyle.values.map((s) {
               final selected = settings.pieceStyle == s;
               final label = switch (s) {
-                PieceStyle.classic => ('♛', 'Classique'),
-                PieceStyle.solid   => ('♛', 'Contrasté'),
-                PieceStyle.outline => ('♛', 'Contour'),
+                PieceStyle.classic => 'Classique',
+                PieceStyle.solid   => 'Contrasté',
+                PieceStyle.outline => 'Contour',
+                PieceStyle.letters => 'Lettres',
               };
               return Expanded(
                 child: Padding(
@@ -116,29 +118,17 @@ class SettingsScreen extends ConsumerWidget {
                       ),
                       child: Column(
                         children: [
-                          Text(label.$1,
-                              style: TextStyle(
-                                fontSize: 28,
-                                color: s == PieceStyle.outline
-                                    ? Colors.transparent
-                                    : Colors.white,
-                                shadows: s == PieceStyle.solid
-                                    ? null
-                                    : const [
-                                        Shadow(
-                                            color: Colors.black54,
-                                            blurRadius: 3)
-                                      ],
-                                // Simule l'outline avec strokeWidth via foreground
-                                foreground: s == PieceStyle.outline
-                                    ? (Paint()
-                                      ..style = PaintingStyle.stroke
-                                      ..strokeWidth = 1.5
-                                      ..color = Colors.white)
-                                    : null,
-                              )),
+                          // Sprint 18 : aperçu rendu par le vrai widget (l'ancien
+                          // Text combinait color + foreground → assertion Flutter).
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              ChessPieceWidget(pieceCode: 'wQ', size: 34, style: s),
+                              ChessPieceWidget(pieceCode: 'bN', size: 34, style: s),
+                            ],
+                          ),
                           const Gap(4),
-                          Text(label.$2,
+                          Text(label,
                               style: const TextStyle(
                                   color: Colors.white70, fontSize: 11)),
                         ],

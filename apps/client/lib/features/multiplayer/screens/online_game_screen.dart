@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../replay/screens/game_replay_screen.dart';
 import 'package:gap/gap.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../board/widgets/chess_board.dart';
@@ -16,6 +17,10 @@ class OnlineGameScreen extends ConsumerStatefulWidget {
 }
 
 class _OnlineGameScreenState extends ConsumerState<OnlineGameScreen> {
+  /// Garde-fous contre l'empilement des boîtes de dialogue (sprint 18).
+  String? _resultShownFor;
+  bool _drawDialogOpen = false;
+
   @override
   void dispose() {
     ref.read(multiplayerProvider.notifier).disconnect();
@@ -64,16 +69,21 @@ class _OnlineGameScreenState extends ConsumerState<OnlineGameScreen> {
 
   Widget _buildView(BuildContext context, OnlineGameState state) {
     // Fin de partie
-    if (state.isOver) {
+    // Sprint 18 : une seule boîte par événement (avant, chaque reconstruction
+    // de l'écran en empilait une nouvelle).
+    if (state.isOver && _resultShownFor != state.gameId) {
+      _resultShownFor = state.gameId;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _showResultDialog(context, state);
       });
     }
 
     // Offre de nulle reçue
-    if (state.drawOffered) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _showDrawDialog(context);
+    if (state.drawOffered && !_drawDialogOpen) {
+      _drawDialogOpen = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await _showDrawDialog(context);
+        _drawDialogOpen = false;
       });
     }
 
@@ -215,6 +225,21 @@ class _OnlineGameScreenState extends ConsumerState<OnlineGameScreen> {
           style: const TextStyle(color: Colors.white70),
         ),
         actions: [
+          // Sprint 18 : revoir la partie et l'analyser avec Stockfish
+          if (state.gameId != null)
+            TextButton.icon(
+              icon: const Icon(Icons.insights),
+              label: const Text('Revoir et analyser'),
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => GameReplayScreen(gameId: state.gameId!, flipped: state.playerColor == 'b'),
+                  ),
+                );
+              },
+            ),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);

@@ -153,6 +153,31 @@ class AuthNotifier extends StateNotifier<AsyncValue<AuthState>> {
     }
   }
 
+  // ─── Profil (sprint 18) ───────────────────────────────────────────────────
+
+  /// Met à jour le profil (PATCH /auth/me, validé côté serveur).
+  /// `clearAvatar` / `clearCountry` envoient null pour effacer la valeur.
+  /// Lève [ApiException] en cas de refus (ex. nom trop court).
+  Future<void> updateProfile({
+    String? displayName,
+    String? avatarUrl,
+    String? country,
+    bool clearAvatar = false,
+    bool clearCountry = false,
+  }) async {
+    final current = state.valueOrNull;
+    final tokens = current?.tokens;
+    if (current == null || tokens == null) {
+      throw const ApiException(statusCode: 401, error: 'AUTH_REQUIRED', message: 'Connexion requise.');
+    }
+    final data = await ApiClient(accessToken: tokens.accessToken).patch('/auth/me', {
+      if (displayName != null) 'displayName': displayName,
+      if (clearAvatar) 'avatarUrl': null else if (avatarUrl != null) 'avatarUrl': avatarUrl,
+      if (clearCountry) 'country': null else if (country != null) 'country': country,
+    });
+    state = AsyncValue.data(current.copyWith(user: AuthUser.fromJson(data)));
+  }
+
   // ─── Déconnexion ──────────────────────────────────────────────────────────
 
   Future<void> logout() async {

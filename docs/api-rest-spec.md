@@ -55,6 +55,27 @@ Appelée par Apple (form-urlencoded) lors de « Sign in with Apple » sur Androi
 
 ---
 
+## Profil et historique — sprint 18
+
+### PATCH /auth/me — authentifié
+Body (tous facultatifs) : `{ "displayName"?: string, "avatarUrl"?: string | null, "country"?: string | null }`
+- `displayName` : 2 à 32 caractères ; les espaces sont normalisés ;
+- `avatarUrl` : `preset:<pièce>-<couleur>` (pièce ∈ king, queen, rook, bishop, knight, pawn ; couleur ∈ red, blue, green, purple, orange, teal), ou URL **HTTPS** de 512 caractères au plus. `null` revient aux initiales ;
+- `country` : code ISO 3166-1 alpha-2 (ex. `CA`). `null` efface la valeur.
+
+400 si une valeur est invalide. Avant ce sprint, le corps n'était pas validé du tout.
+
+### GET /users/:id — public
+Profil public : `{ id, displayName, avatarUrl, country, role, createdAt }`. **Sans e-mail** depuis le sprint 18 : avant, l'adresse de n'importe quel joueur était lisible.
+
+### GET /users/:id/games?status=ONGOING|FINISHED&page=&pageSize= — authentifié
+`pageSize` est plafonné à 50. Chaque entrée est vue du côté du joueur :
+`{ id, mode, timeControl, status, result, resultReason, color: "white"|"black", outcome: "win"|"loss"|"draw"|null, opponent: { type: "user", id, displayName, avatarUrl } | { type: "ai", level } | null, moveCount, createdAt, endedAt }`.
+Les parties contre l'IA créées par un joueur connecté lui sont rattachées. Les parties locales restent anonymes.
+
+### Analyse (`GET /games/:id/analysis`)
+Chaque évaluation inclut désormais `evalWhiteCp` (point de vue des blancs, utilisé par le graphique) et `player`. La classification se fonde sur la baisse de **probabilité de gain** du joueur (méthode Lichess) : imprécision ≥ 10 points, erreur ≥ 20, gaffe ≥ 30. « Théorie » ne s'applique qu'aux 8 premiers demi-coups **sains**. `brilliant` n'est pas encore détecté (il faudrait repérer les sacrifices).
+
 ## Users (`/users`) — authentifié
 
 ### GET /users/me

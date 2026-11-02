@@ -16,6 +16,7 @@ import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { OAuthLoginDto } from './dto/oauth-login.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { OAuthVerifierService } from './oauth/oauth-verifier.service';
 import { OAuthProviderParam, PROVIDER_TO_AUTH } from './oauth/oauth.types';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
@@ -111,13 +112,10 @@ export class AuthController {
     return this.authService.getProfile(user.userId);
   }
 
-  /** PATCH /auth/me — mettre à jour le profil */
+  /** PATCH /auth/me — mettre à jour le profil (sprint 18 : corps validé) */
   @Patch('me')
   @UseGuards(JwtAuthGuard)
-  updateMe(
-    @Req() req: Request,
-    @Body() body: { displayName?: string; avatarUrl?: string; country?: string },
-  ) {
+  updateMe(@Req() req: Request, @Body() body: UpdateProfileDto) {
     const user = req.user as RequestUser;
     return this.authService.updateProfile(user.userId, body);
   }

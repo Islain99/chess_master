@@ -114,6 +114,16 @@ class ApiClient {
     return _parseResponse(response);
   }
 
+  /// Sprint 18 : GET d'une route qui renvoie un tableau JSON (ex. /users/:id/ratings).
+  Future<List<dynamic>> getList(String path) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}$path');
+    final response = await _client.get(uri, headers: _headers()).timeout(ApiConfig.receiveTimeout);
+    final decoded = response.body.isEmpty ? null : jsonDecode(response.body);
+    if (response.statusCode >= 200 && response.statusCode < 300 && decoded is List) return decoded;
+    _parseResponse(response); // lève ApiException avec le message du serveur
+    return const [];
+  }
+
   /// Sprint 16 : PATCH (ex. /notifications/:id/read).
   Future<Map<String, dynamic>> patch(
     String path, [

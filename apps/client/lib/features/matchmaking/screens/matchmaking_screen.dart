@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../multiplayer/providers/multiplayer_provider.dart';
 import 'package:gap/gap.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -40,8 +41,10 @@ class _MatchmakingScreenState extends ConsumerState<MatchmakingScreen> {
     // Naviguer vers la partie quand le match est trouvé
     ref.listen(matchmakingProvider, (_, next) {
       if (next.isFound && next.gameId != null && mounted) {
+        // Sprint 18 : la partie trouvée n'était jamais transmise au provider
+        // multijoueur → OnlineGameScreen restait vide. On la rejoint ici.
+        ref.read(multiplayerProvider.notifier).resumeGame(next.gameId!);
         ref.read(matchmakingProvider.notifier).reset();
-        // L'OnlineGameScreen sera initialisé avec le gameId
         Navigator.pushReplacement(
           context,
           MaterialPageRoute<void>(builder: (_) => const OnlineGameScreen()),

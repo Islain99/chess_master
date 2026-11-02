@@ -1,4 +1,5 @@
 import { Logger } from '@nestjs/common';
+import { Classification, classifyMove } from './classification';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
@@ -21,9 +22,7 @@ interface AnalysisJobData {
   moves:       MoveData[];
 }
 
-type Classification =
-  | 'book' | 'brilliant' | 'best'
-  | 'good' | 'inaccuracy' | 'mistake' | 'blunder';
+// Sprint 18 : classification déplacée dans classification.ts (probabilité de gain).
 
 /**
  * BullMQ Worker — analyse post-partie Stockfish.
@@ -55,6 +54,9 @@ export class AnalysisProcessor extends WorkerHost {
       san:            string;
       uci:            string;
       evalCp:         number;
+      /** Sprint 18 : évaluation du point de vue des blancs (graphique client). */
+      evalWhiteCp:    number;
+      player:         string;
       bestUci:        string;
       evalLoss:       number;
       classification: Classification;
@@ -92,17 +94,20 @@ export class AnalysisProcessor extends WorkerHost {
         beforeAnalysis.evalCp - evalAfterFromPlayerPOV,
       );
 
-      const classification = this.classify(
-        evalLoss,
-        move.uci === beforeAnalysis.bestUci,
-        move.ply,
-      );
+      const classification = classifyMove({
+        bestEvalCp: beforeAnalysis.evalCp,
+        playedEvalCp: evalAfterFromPlayerPOV,
+        isBestMove: move.uci === beforeAnalysis.bestUci,
+        ply: move.ply,
+      });
 
       evaluations.push({
         ply:            move.ply,
         san:            move.san,
         uci:            move.uci,
         evalCp:         evalAfterFromPlayerPOV,
+        evalWhiteCp:    move.player === 'WHITE' ? evalAfterFromPlayerPOV : -evalAfterFromPlayerPOV,
+        player:         move.player,
         bestUci:        beforeAnalysis.bestUci,
         evalLoss,
         classification,
@@ -144,23 +149,6 @@ export class AnalysisProcessor extends WorkerHost {
       `Analyse terminée : partie ${gameId} — ` +
       `Blancs ${accuracyWhite.toFixed(1)}% / Noirs ${accuracyBlack.toFixed(1)}%`,
     );
-  }
-
-  // ──────────────────────────────────────────────
-  // Classification des coups
-  // ──────────────────────────────────────────────
-
-  private classify(
-    evalLoss: number,
-    isBestMove: boolean,
-    ply: number,
-  ): Classification {
-    if (ply <= 10)      return 'book';       // phase d'ouverture
-    if (isBestMove && evalLoss <= 5)  return 'best';
-    if (evalLoss <= 5)  return 'good';       // très proche du meilleur
-    if (evalLoss <= 20) return 'inaccuracy'; // légère imprécision
-    if (evalLoss <= 100) return 'mistake';   // erreur notable
-    return 'blunder';                        // gaffe grave
   }
 
   // ──────────────────────────────────────────────

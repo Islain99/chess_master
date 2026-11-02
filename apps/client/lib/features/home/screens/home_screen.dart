@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/player_avatar.dart';
+import '../../game/providers/resumable_game_provider.dart';
+import '../../history/screens/my_games_screen.dart';
+import '../../profile/screens/profile_screen.dart';
 import '../../auth/models/auth_state.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../auth/screens/login_screen.dart';
@@ -48,7 +52,7 @@ class HomeScreen extends ConsumerWidget {
                               fontSize: 24,
                               fontWeight: FontWeight.w700,
                               color: Colors.white)),
-                      Text('Sprint 8 — analyse & classement',
+                      Text('Jouer · analyser · progresser',
                           style: TextStyle(
                               fontSize: 12,
                               color: Colors.white.withValues(alpha: 0.4))),
@@ -100,8 +104,8 @@ class HomeScreen extends ConsumerWidget {
                 const Gap(4),
                 if (auth?.isLoggedIn ?? false)
                   _UserAvatar(
-                    displayName: auth!.user!.displayName,
-                    onTap: () => _showProfileMenu(context, ref, auth),
+                    user: auth!.user!,
+                    onTap: () => _openProfile(context),
                   )
                 else
                   TextButton.icon(
@@ -117,9 +121,12 @@ class HomeScreen extends ConsumerWidget {
 
               // ─── Carte bienvenue ─────────────────────────────────────────
               if (auth?.isLoggedIn ?? false) ...[
-                _WelcomeCard(user: auth!.user!),
+                _WelcomeCard(user: auth!.user!, onTap: () => _openProfile(context)),
                 const Gap(16),
               ],
+
+              // ─── Reprendre (sprint 18) ───────────────────────────────────
+              const _ResumeCard(),
 
               // ─── Modes de jeu ─────────────────────────────────────────────
               _ModeCard(
@@ -165,6 +172,17 @@ class HomeScreen extends ConsumerWidget {
                       fontWeight: FontWeight.w500, letterSpacing: 0.5)),
               const Gap(10),
               Row(children: [
+                if (auth?.isLoggedIn ?? false) ...[
+                  Expanded(
+                    child: _ToolCard(
+                      icon: Icons.history,
+                      label: 'Mes parties',
+                      onTap: () => Navigator.push(context,
+                          MaterialPageRoute<void>(builder: (_) => const MyGamesScreen())),
+                    ),
+                  ),
+                  const Gap(10),
+                ],
                 Expanded(
                   child: _ToolCard(
                     icon: Icons.leaderboard,
@@ -215,46 +233,36 @@ class HomeScreen extends ConsumerWidget {
     }
   }
 
-  void _showProfileMenu(BuildContext context, WidgetRef ref, AuthState auth) {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: AppTheme.surface,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => _ProfileSheet(auth: auth, ref: ref),
-    );
+  /// Sprint 18 : écran Profil complet (remplace l'ancienne feuille modale).
+  void _openProfile(BuildContext context) {
+    Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const ProfileScreen()));
   }
 }
 
 // ─── Widgets utilitaires ──────────────────────────────────────────────────────
 
 class _UserAvatar extends StatelessWidget {
-  const _UserAvatar({required this.displayName, required this.onTap});
-  final String displayName;
+  const _UserAvatar({required this.user, required this.onTap});
+  final AuthUser user;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: CircleAvatar(
-        radius: 18,
-        backgroundColor: AppTheme.accent,
-        child: Text(displayName[0].toUpperCase(),
-            style: const TextStyle(
-                color: Colors.white, fontWeight: FontWeight.w700)),
-      ),
+      child: PlayerAvatar(displayName: user.displayName, avatarUrl: user.avatarUrl, radius: 18),
     );
   }
 }
 
 class _WelcomeCard extends StatelessWidget {
-  const _WelcomeCard({required this.user});
+  const _WelcomeCard({required this.user, required this.onTap});
   final AuthUser user;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GestureDetector(onTap: onTap, child: Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -264,12 +272,7 @@ class _WelcomeCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(children: [
-        CircleAvatar(
-          radius: 22, backgroundColor: AppTheme.accent,
-          child: Text(user.displayName[0].toUpperCase(),
-              style: const TextStyle(
-                  color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
-        ),
+        PlayerAvatar(displayName: user.displayName, avatarUrl: user.avatarUrl, radius: 22),
         const Gap(14),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -284,53 +287,7 @@ class _WelcomeCard extends StatelessWidget {
           ]),
         ),
       ]),
-    );
-  }
-}
-
-class _ProfileSheet extends ConsumerWidget {
-  const _ProfileSheet({required this.auth, required this.ref});
-  final AuthState auth;
-  final WidgetRef ref;
-
-  @override
-  Widget build(BuildContext context, WidgetRef _) {
-    final user = auth.user!;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        CircleAvatar(
-          radius: 32, backgroundColor: AppTheme.accent,
-          child: Text(user.displayName[0].toUpperCase(),
-              style: const TextStyle(
-                  color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700)),
-        ),
-        const Gap(12),
-        Text(user.displayName,
-            style: const TextStyle(
-                color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
-        const Gap(4),
-        Text(user.email,
-            style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.55), fontSize: 13)),
-        const Gap(24),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            icon: const Icon(Icons.logout, size: 18),
-            label: const Text('Se déconnecter'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppTheme.accent,
-              side: const BorderSide(color: AppTheme.accent),
-            ),
-            onPressed: () async {
-              Navigator.pop(context);
-              await ref.read(authProvider.notifier).logout();
-            },
-          ),
-        ),
-      ]),
-    );
+    ));
   }
 }
 
@@ -452,6 +409,37 @@ class _TimeControlRow extends StatelessWidget {
           ),
         );
       }).toList(),
+    );
+  }
+}
+
+/// Sprint 18 : carte « Reprendre la partie » (partie locale / IA non terminée).
+class _ResumeCard extends ConsumerWidget {
+  const _ResumeCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final resumable = ref.watch(resumableGameProvider).valueOrNull;
+    if (resumable == null) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Card(
+        color: AppTheme.accent.withValues(alpha: 0.18),
+        child: ListTile(
+          leading: const Icon(Icons.play_circle_fill, color: AppTheme.accent, size: 34),
+          title: const Text('Reprendre la partie',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+          subtitle: Text(resumable.description, style: const TextStyle(color: Colors.white60)),
+          trailing: const Icon(Icons.chevron_right, color: Colors.white54),
+          onTap: () async {
+            await ref.read(gameProvider.notifier).resumeGame(resumable.id);
+            if (!context.mounted) return;
+            await Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const GameScreen()));
+            ref.invalidate(resumableGameProvider); // terminée entre-temps ?
+          },
+        ),
+      ),
     );
   }
 }

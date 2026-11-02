@@ -36,8 +36,8 @@ export class GamesController {
 
   /** POST /games — créer une partie */
   @Post()
-  create(@Body() dto: CreateGameDto) {
-    return this.gamesService.create(dto);
+  create(@Body() dto: CreateGameDto, @Req() req: Request) {
+    return this.gamesService.create(dto, actorOf(req));
   }
 
   /** POST /games/import — importer depuis PGN ou FEN (doit être AVANT :id) */
