@@ -113,6 +113,7 @@ AI_ENGINE_URL=http://localhost:3001
 | 12 | Tests supplémentaires · cache Elo · stabilisation |
 | 13 | Client buildable : bootstrap des 6 plateformes · tests Flutter · CI Flutter · image Docker Web |
 | 14 | Client compilable (15 erreurs corrigées) · suppression du code mort · schéma Prisma unique |
+| 15 | Connexion Google · Apple · Facebook (échange de jeton vérifié côté serveur) · enums Prisma réels — voir [docs/oauth-setup.md](docs/oauth-setup.md) |
 
 ## Tests
 
@@ -122,7 +123,7 @@ flutter analyze       # 0 problème
 flutter test          # tests unitaires et de widget
 
 cd apps/api
-npm run test          # 75 tests unitaires
+npm run test          # 113 tests unitaires et HTTP
 npm run test:e2e      # tests end-to-end (nécessite Postgres)
 npm run lint          # ESLint TypeScript
 npm run build         # compilation TypeScript

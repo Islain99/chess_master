@@ -5,6 +5,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { OAuthVerifierService } from './oauth/oauth-verifier.service';
 
 @Module({
   imports: [
@@ -15,7 +16,8 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, JwtAuthGuard],
+  // Sprint 15 : OAuthVerifierService (Google, Apple, Facebook)
+  providers: [AuthService, JwtStrategy, JwtAuthGuard, OAuthVerifierService],
   exports: [AuthService, JwtModule, JwtAuthGuard, JwtStrategy],
 })
 export class AuthModule {}

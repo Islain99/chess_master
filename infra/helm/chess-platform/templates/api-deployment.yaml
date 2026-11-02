@@ -53,6 +53,13 @@ spec:
                 secretKeyRef:
                   name: {{ .Release.Name }}-secrets
                   key: jwtRefreshSecret
+            # Sprint 15 : secret Facebook facultatif (connexion Facebook désactivée sans lui)
+            - name: FACEBOOK_APP_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-secrets
+                  key: facebookAppSecret
+                  optional: true
             - name: AI_ENGINE_URL
               value: "http://{{ .Release.Name }}-ai-engine:3001"
           livenessProbe:

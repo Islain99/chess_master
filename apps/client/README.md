@@ -46,6 +46,11 @@ flutter run -d <emulateur> --dart-define=API_URL=http://10.0.2.2:3000/api/v1 --d
 |---|---|---|
 | `API_URL` | `http://localhost:3000/api/v1` | Base de l'API REST |
 | `WS_URL` | `http://localhost:3000` | Serveur Socket.IO |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_SERVER_CLIENT_ID` | vide | Connexion Google (sprint 15) |
+| `APPLE_SERVICE_ID`, `APPLE_REDIRECT_URI` | vide | Connexion Apple sur Android et le Web |
+| `FACEBOOK_APP_ID` | vide | Connexion Facebook sur le Web |
+
+Une variable OAuth vide masque le bouton correspondant. Le guide [docs/oauth-setup.md](../../docs/oauth-setup.md) détaille la configuration des consoles Google, Apple et Meta, ainsi que des projets natifs.
 
 ## 3. Qualité
 

@@ -456,7 +456,7 @@ export class GamesService {
     const finalFen = chess.fen();
     const isOver = chess.isGameOver();
 
-    let gameStatus = GameStatus.ONGOING;
+    let gameStatus: GameStatus = GameStatus.ONGOING;
     let result: GameResult | null = null;
     let reason: ResultReason | null = null;
 
@@ -535,7 +535,7 @@ export class GamesService {
     whiteMs: number,
     blackMs: number,
   ) {
-    let newGameStatus = GameStatus.ONGOING;
+    let newGameStatus: GameStatus = GameStatus.ONGOING;
     let result: GameResult | null = null;
     let reason: ResultReason | null = null;
 

@@ -21,6 +21,13 @@ dependencies:
   # Stockage sécurisé des tokens
   shared_preferences: ^2.2.3
 
+  # Connexion OAuth (sprint 15)
+  google_sign_in: ^7.2.0
+  google_sign_in_web: ^1.1.0      # bouton officiel Google sur le Web
+  sign_in_with_apple: ^8.1.0
+  flutter_facebook_auth: ^7.3.2
+  crypto: ^3.0.6                  # SHA-256 du nonce Apple
+
   # UI
   google_fonts: ^6.2.1
   gap: ^3.0.1

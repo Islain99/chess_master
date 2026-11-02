@@ -11,6 +11,7 @@ import { AuthProvider, UserRole } from '../common/prisma-enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { OAuthProfile, PROVIDER_LABEL } from './oauth/oauth.types';
 
 /**
  * Durée de vie des tokens.
@@ -78,6 +79,83 @@ export class AuthService {
       data: { lastLoginAt: new Date() },
     });
 
+    return this.issueTokens(user);
+  }
+
+  // ──────────────────────────────────────────────
+  // Connexion OAuth2 (Google, Apple, Facebook) — sprint 15
+  // ──────────────────────────────────────────────
+
+  /**
+   * Retrouve ou crée le compte correspondant à une identité déjà vérifiée par
+   * OAuthVerifierService, puis émet nos jetons.
+   *
+   * Ordre de résolution :
+   *   1. compte déjà lié à (fournisseur, identifiant fournisseur) ;
+   *   2. compte existant avec la même adresse e-mail, UNIQUEMENT si le
+   *      fournisseur garantit l'adresse (email_verified) → liaison du compte.
+   *      Le mot de passe éventuel reste valable : l'utilisateur garde les deux
+   *      moyens de connexion ;
+   *   3. création d'un nouveau compte.
+   *
+   * Une adresse non vérifiée n'est jamais enregistrée : sinon quelqu'un
+   * pourrait réserver l'e-mail d'autrui puis capter son futur compte.
+   */
+  async loginWithOAuth(profile: OAuthProfile) {
+    const linked = await this.prisma.user.findUnique({
+      where: {
+        authProvider_providerId: {
+          authProvider: profile.provider,
+          providerId: profile.providerId,
+        },
+      },
+    });
+    if (linked) return this.completeOAuthLogin(linked);
+
+    const trustedEmail = profile.emailVerified ? profile.email?.toLowerCase() ?? null : null;
+
+    if (trustedEmail) {
+      const byEmail = await this.prisma.user.findUnique({ where: { email: trustedEmail } });
+      if (byEmail) {
+        if (byEmail.providerId && byEmail.authProvider !== AuthProvider.LOCAL) {
+          // Un compte = un fournisseur externe (contrainte du modèle User).
+          throw new ConflictException(
+            `Cette adresse e-mail est déjà associée à une connexion ${PROVIDER_LABEL[byEmail.authProvider] ?? byEmail.authProvider}.`,
+          );
+        }
+        const updated = await this.prisma.user.update({
+          where: { id: byEmail.id },
+          data: {
+            authProvider: profile.provider,
+            providerId: profile.providerId,
+            avatarUrl: byEmail.avatarUrl ?? profile.avatarUrl,
+          },
+        });
+        return this.completeOAuthLogin(updated);
+      }
+    }
+
+    const created = await this.prisma.user.create({
+      data: {
+        email: trustedEmail,
+        displayName: oauthDisplayName(profile),
+        avatarUrl: profile.avatarUrl,
+        authProvider: profile.provider,
+        providerId: profile.providerId,
+        lastLoginAt: new Date(),
+      },
+    });
+    return this.issueTokens(created);
+  }
+
+  private async completeOAuthLogin(user: { id: string; isActive: boolean } & Parameters<AuthService['issueTokens']>[0]) {
+    if (!user.isActive) {
+      throw new UnauthorizedException('Ce compte est désactivé.');
+    }
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
     return this.issueTokens(user);
   }
 
@@ -196,4 +274,18 @@ export class AuthService {
       createdAt:   user.createdAt,
     };
   }
+}
+
+/**
+ * Nom d'affichage d'un compte créé par OAuth : celui du fournisseur, sinon la
+ * partie locale de l'e-mail, sinon « Joueur-XXXX ». Ramené à 2–32 caractères
+ * (mêmes bornes que RegisterDto).
+ */
+function oauthDisplayName(profile: OAuthProfile): string {
+  const candidate =
+    profile.displayName?.trim() ||
+    (profile.emailVerified ? profile.email?.split('@')[0] : undefined) ||
+    `Joueur-${profile.providerId.slice(-4)}`;
+  const name = candidate.replace(/\s+/g, ' ').slice(0, 32).trim();
+  return name.length >= 2 ? name : `Joueur-${profile.providerId.slice(-4)}`;
 }

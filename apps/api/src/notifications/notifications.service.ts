@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { NotificationType } from '../common/prisma-enums';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -13,7 +14,8 @@ export class NotificationsService {
     payload: Record<string, unknown>,
   ) {
     return this.prisma.notification.create({
-      data: { userId, type, payload },
+      // Sprint 15 : Record<string, unknown> n'est pas un InputJsonValue pour Prisma.
+      data: { userId, type, payload: payload as Prisma.InputJsonValue },
     });
   }
 

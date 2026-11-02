@@ -27,11 +27,31 @@ Body : `{ "refreshToken": string }`
 Body : `{ "refreshToken": string }`
 204. Révoque le refresh token côté serveur.
 
-### GET /auth/oauth/:provider
-`provider` ∈ `google | apple | facebook`. Redirige vers le fournisseur OAuth2.
+### POST /auth/oauth/:provider — sprint 15
+`provider` ∈ `google | apple | facebook`. Échange un jeton obtenu par le SDK natif du fournisseur contre nos jetons.
 
-### GET /auth/oauth/:provider/callback
-200 : `{ "user": User, "accessToken": string, "refreshToken": string }`
+Body : `{ "token": string, "nonce"?: string, "displayName"?: string }`
+
+| Fournisseur | `token` | `nonce` | Vérification serveur |
+|---|---|---|---|
+| google | ID token (JWT) | — | signature JWKS Google, `iss`, `aud` ∈ `GOOGLE_CLIENT_IDS`, `exp` |
+| apple | identity token (JWT) | nonce brut (le jeton contient son SHA-256) | signature JWKS Apple, `iss`, `aud` ∈ `APPLE_CLIENT_IDS`, `exp`, nonce |
+| facebook | access token | — | `/debug_token` (app_id = `FACEBOOK_APP_ID`) puis `/me` avec `appsecret_proof` |
+| facebook (iOS Limited Login) | authentication token (JWT) | nonce brut | signature JWKS Facebook, `iss`, `aud` = `FACEBOOK_APP_ID`, nonce |
+
+`displayName` : Apple seulement (le nom n'est transmis qu'au client, à la première connexion).
+
+200 : `{ "user": User, "accessToken": string, "refreshToken": string, "expiresIn": number }`
+
+Résolution du compte :
+1. compte déjà lié au couple (fournisseur, identifiant) ;
+2. compte existant avec la même adresse, si le fournisseur la déclare vérifiée → liaison. Le mot de passe éventuel reste valable ;
+3. sinon, création d'un compte. Une adresse non vérifiée n'est jamais enregistrée.
+
+Erreurs : 400 fournisseur ou corps invalide · 401 jeton invalide, expiré, d'une autre application, ou compte désactivé · 409 adresse déjà liée à un autre fournisseur · 503 fournisseur non configuré.
+
+### POST /auth/oauth/apple/callback — sprint 15
+Appelée par Apple (form-urlencoded) lors de « Sign in with Apple » sur Android et sur le Web. Répond 303 vers `intent://callback?…#Intent;package=<APPLE_ANDROID_PACKAGE>;scheme=signinwithapple;end`. Aucun jeton n'est vérifié à cette étape.
 
 ---
 

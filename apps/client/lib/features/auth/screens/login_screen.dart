@@ -3,9 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import '../../../core/theme/app_theme.dart';
 import '../providers/auth_provider.dart';
+import '../widgets/oauth_buttons.dart';
 import 'register_screen.dart';
 
-/// Écran de connexion — email + mot de passe.
+/// Écran de connexion — e-mail + mot de passe, ou Google / Apple / Facebook (sprint 15).
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key, this.onSuccess});
 
@@ -96,6 +97,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   : const Text('Se connecter'),
             ),
 
+            // ─── Connexion OAuth (sprint 15) ──────────────────────────────
+            OAuthButtons(
+              onSuccess: _onLoggedIn,
+              onError: (message) => setState(() => _error = message),
+            ),
+
             const Gap(20),
 
             // ─── Lien inscription ─────────────────────────────────────────
@@ -158,8 +165,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         _loading = false;
       });
     } else if (auth.valueOrNull?.isLoggedIn ?? false) {
-      widget.onSuccess?.call();
-      Navigator.pop(context);
+      _onLoggedIn();
     }
+  }
+
+  void _onLoggedIn() {
+    widget.onSuccess?.call();
+    Navigator.pop(context);
   }
 }

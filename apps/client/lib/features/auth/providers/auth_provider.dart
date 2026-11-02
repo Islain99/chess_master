@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/http/api_client.dart';
 import '../models/auth_state.dart';
+import '../services/oauth_service.dart';
 
 // ─── État ─────────────────────────────────────────────────────────────────────
 
@@ -23,8 +24,11 @@ class AuthState {
 
 final authProvider =
     StateNotifierProvider<AuthNotifier, AsyncValue<AuthState>>((ref) {
-  return AuthNotifier(ref.read(rawApiClientProvider));
+  return AuthNotifier(ref.read(rawApiClientProvider), ref.read(oauthServiceProvider));
 });
+
+/// Sprint 15 : SDK Google / Apple / Facebook (surchargeable dans les tests).
+final oauthServiceProvider = Provider<OAuthService>((ref) => OAuthService());
 
 /// Provider d'un ApiClient sans token (pour les appels auth).
 final rawApiClientProvider = Provider<ApiClient>((ref) => ApiClient());
@@ -38,11 +42,12 @@ final apiClientProvider = Provider<ApiClient>((ref) {
 // ─── Notifier ─────────────────────────────────────────────────────────────────
 
 class AuthNotifier extends StateNotifier<AsyncValue<AuthState>> {
-  AuthNotifier(this._api) : super(const AsyncValue.loading()) {
+  AuthNotifier(this._api, [this._oauth]) : super(const AsyncValue.loading()) {
     _restoreSession();
   }
 
   final ApiClient _api;
+  final OAuthService? _oauth;
 
   // ─── Restauration de session ───────────────────────────────────────────────
 
@@ -119,6 +124,23 @@ class AuthNotifier extends StateNotifier<AsyncValue<AuthState>> {
     }
   }
 
+  // ─── Connexion OAuth (sprint 15) ──────────────────────────────────────────
+
+  /// Échange le jeton Google / Apple / Facebook contre nos JWT.
+  /// L'API revérifie le jeton auprès du fournisseur avant d'ouvrir la session.
+  Future<void> loginWithOAuth(OAuthCredential credential) async {
+    state = const AsyncValue.loading();
+    try {
+      final data = await _api.post(
+        '/auth/oauth/${credential.provider.name}',
+        credential.toJson(),
+      );
+      await _handleAuthResponse(data);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+    }
+  }
+
   // ─── Déconnexion ──────────────────────────────────────────────────────────
 
   Future<void> logout() async {
@@ -133,6 +155,10 @@ class AuthNotifier extends StateNotifier<AsyncValue<AuthState>> {
     } catch (_) {
       // Ignorer les erreurs réseau à la déconnexion
     }
+
+    // Sprint 15 : fermer aussi la session du fournisseur (sinon « Continuer
+    // avec Google » reconnecterait silencieusement le même compte).
+    await _oauth?.signOutAll();
 
     await _clearStorage();
     state = const AsyncValue.data(AuthState());

@@ -24,6 +24,11 @@ api:
     NODE_ENV:    production
     PORT:        "3000"
     CORS_ORIGIN: "https://chess.example.com"
+    # ─── OAuth (sprint 15) — identifiants PUBLICS, vide = fournisseur désactivé
+    GOOGLE_CLIENT_IDS:     ""   # client IDs Web, iOS, macOS séparés par des virgules
+    APPLE_CLIENT_IDS:      ""   # bundle ID iOS/macOS + Services ID (Android/Web)
+    APPLE_ANDROID_PACKAGE: "com.islain99.chess_client"
+    FACEBOOK_APP_ID:       ""
 
 aiEngine:
   enabled:  true
@@ -73,3 +78,4 @@ secrets:
   jwtRefreshSecret: "CHANGE_ME_IN_PROD"
   databaseUrl:      "postgresql://chess:chess@postgres:5432/chess"
   redisUrl:         "redis://redis:6379"
+  facebookAppSecret: ""   # sprint 15 — App Secret Meta (--set secrets.facebookAppSecret=…)
