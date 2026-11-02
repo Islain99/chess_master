@@ -1,9 +1,11 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { Chess } from 'chess.js';
@@ -32,6 +34,7 @@ import { StockfishClientService } from './ai/stockfish-client.service';
 import { RatingsService } from '../ratings/ratings.service';
 import { CreateGameDto } from './dto/create-game.dto';
 import { MakeMoveDto } from './dto/make-move.dto';
+import { DRAW_OFFER_STORE, DrawOfferStore, MemoryDrawOfferStore } from './draw-offer.store';
 
 const INITIAL_FEN =
   'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -48,12 +51,11 @@ export class GamesService {
   private readonly logger = new Logger(GamesService.name);
 
   /**
-   * Sprint 17 : propositions de nulle en attente (gameId → couleur qui propose).
-   * En mémoire : suffisant avec un seul pod API ou avec l'affinité de session
-   * Socket.IO ; à déplacer dans Redis si les joueurs d'une même partie
-   * peuvent être servis par des pods différents.
+   * Propositions de nulle en attente (gameId → couleur qui propose).
+   * Sprint 19 : stockées dans Redis (partagées entre réplicas) ; repli en
+   * mémoire quand aucun store n'est injecté (tests unitaires).
    */
-  private readonly pendingDrawOffers = new Map<string, Seat>();
+  private readonly drawOffers: DrawOfferStore;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -61,7 +63,10 @@ export class GamesService {
     private readonly ai: AiEngineService,
     private readonly stockfishClient: StockfishClientService,
     private readonly ratingsService: RatingsService,
-  ) {}
+    @Optional() @Inject(DRAW_OFFER_STORE) drawOffers?: DrawOfferStore,
+  ) {
+    this.drawOffers = drawOffers ?? new MemoryDrawOfferStore();
+  }
 
   // ──────────────────────────────────────────────
   // Création
@@ -198,7 +203,7 @@ export class GamesService {
     );
 
     // Un coup joué met fin à toute proposition de nulle en cours.
-    this.pendingDrawOffers.delete(id);
+    await this.clearDrawOffer(id);
 
     const [move, _upd] = await this.prisma.$transaction([
       this.prisma.move.create({
@@ -463,7 +468,7 @@ export class GamesService {
       throw new BadRequestException('La proposition de nulle concerne les parties en ligne.');
     }
     const seat = requirePlayer(game, actor);
-    this.pendingDrawOffers.set(id, seat);
+    await this.drawOffers.set(id, seat);
     return seat;
   }
 
@@ -472,7 +477,7 @@ export class GamesService {
     const game = await this.findOngoing(id);
     if (!isOnlineGame(game.mode)) return;
     const seat = requirePlayer(game, actor);
-    this.consumeDrawOffer(id, seat);
+    await this.consumeDrawOffer(id, seat);
   }
 
   /**
@@ -483,7 +488,7 @@ export class GamesService {
     const game = await this.findOngoing(id);
 
     if (isOnlineGame(game.mode)) {
-      this.consumeDrawOffer(id, requirePlayer(game, actor));
+      await this.consumeDrawOffer(id, requirePlayer(game, actor));
     }
 
     const ended = await this.prisma.game.update({
@@ -513,14 +518,27 @@ export class GamesService {
   }
 
   /** Vérifie et retire la proposition de nulle faite par l'adversaire de `seat`. */
-  private consumeDrawOffer(id: string, seat: Seat) {
-    if (this.pendingDrawOffers.get(id) !== opposite(seat)) {
+  private async consumeDrawOffer(id: string, seat: Seat) {
+    if ((await this.drawOffers.get(id)) !== opposite(seat)) {
       throw new ConflictException({
         error: 'NO_DRAW_OFFER',
         message: 'Votre adversaire ne vous a pas proposé la nulle.',
       });
     }
-    this.pendingDrawOffers.delete(id);
+    await this.drawOffers.delete(id);
+  }
+
+  /**
+   * Retire une éventuelle proposition sans jamais faire échouer l'appelant :
+   * une panne Redis ne doit pas bloquer un coup ou une fin de partie (la clé
+   * expirera d'elle-même).
+   */
+  private async clearDrawOffer(id: string) {
+    try {
+      await this.drawOffers.delete(id);
+    } catch (err) {
+      this.logger.warn(`Nettoyage de la proposition de nulle ${id} impossible : ${err}`);
+    }
   }
 
   /** Temps écoulé depuis le dernier coup (ou le début), mesuré par le serveur. */
@@ -534,7 +552,7 @@ export class GamesService {
    * abandonner une partie classée ne coûtait aucun point.
    */
   private afterGameEnded(game: { id: string; mode: GameMode }) {
-    this.pendingDrawOffers.delete(game.id);
+    void this.clearDrawOffer(game.id);
     if (game.mode === GameMode.MATCHMAKING) {
       this.ratingsService.updateAfterGame(game.id).catch((err) =>
         this.logger.warn(`Mise à jour Elo échouée pour ${game.id} : ${err}`),

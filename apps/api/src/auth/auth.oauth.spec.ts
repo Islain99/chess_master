@@ -36,7 +36,7 @@ const googleProfile: OAuthProfile = {
 
 const prisma = {
   user: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
-  refreshToken: { create: jest.fn() },
+  refreshToken: { create: jest.fn(), deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
 };
 const jwt = { sign: jest.fn().mockReturnValue('access-token') };
 

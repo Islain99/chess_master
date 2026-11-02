@@ -22,6 +22,12 @@ const ACCESS_TOKEN_TTL  = '15m';
 const REFRESH_TOKEN_DAYS = 7;
 const BCRYPT_ROUNDS = 10;
 
+/**
+ * Sprint 20 : empreinte bcrypt factice comparée quand le compte n'existe pas,
+ * pour que la durée de réponse ne révèle pas si une adresse est inscrite.
+ */
+const DUMMY_HASH = bcrypt.hashSync('chess-master-dummy-password', BCRYPT_ROUNDS);
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -64,13 +70,15 @@ export class AuthService {
       where: { email: dto.email },
     });
 
-    if (!user || !user.passwordHash) {
+    // Même coût de calcul que le compte existe ou non (sprint 20).
+    const valid = await bcrypt.compare(dto.password, user?.passwordHash ?? DUMMY_HASH);
+    if (!user || !user.passwordHash || !valid) {
       throw new UnauthorizedException('Identifiants invalides.');
     }
-
-    const valid = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!valid) {
-      throw new UnauthorizedException('Identifiants invalides.');
+    // Sprint 20 : un compte désactivé ne se connectait plus par OAuth, mais
+    // toujours par mot de passe.
+    if (!user.isActive) {
+      throw new UnauthorizedException('Ce compte est désactivé.');
     }
 
     // Mettre à jour la date de dernière connexion
@@ -174,16 +182,36 @@ export class AuthService {
     if (!storedToken) {
       throw new UnauthorizedException('Refresh token invalide.');
     }
-    if (storedToken.revokedAt || storedToken.expiresAt < new Date()) {
-      // Token révoqué ou expiré → invalider toute la famille (détection de réutilisation)
+    if (storedToken.revokedAt) {
+      // Sprint 20 — RÉUTILISATION d'un jeton déjà échangé : il a été copié
+      // (vol, fuite). On révoque toutes les sessions de l'utilisateur ; le
+      // voleur comme la victime doivent se reconnecter.
+      // Avant : l'ancien jeton était SUPPRIMÉ à la rotation, si bien qu'une
+      // réutilisation tombait sur « jeton invalide » et cette branche n'était
+      // jamais atteinte — la session du voleur restait valable.
       await this.prisma.refreshToken.deleteMany({
         where: { userId: storedToken.userId },
       });
-      throw new UnauthorizedException('Refresh token révoqué ou expiré.');
+      throw new UnauthorizedException('Refresh token déjà utilisé : toutes les sessions ont été fermées.');
+    }
+    if (storedToken.expiresAt < new Date()) {
+      await this.prisma.refreshToken.delete({ where: { tokenHash } });
+      throw new UnauthorizedException('Refresh token expiré.');
+    }
+    if (!storedToken.user.isActive) {
+      throw new UnauthorizedException('Ce compte est désactivé.');
     }
 
-    // Révoquer l'ancien token avant d'en émettre un nouveau (rotation)
-    await this.prisma.refreshToken.delete({ where: { tokenHash } });
+    // Rotation ATOMIQUE : le jeton est marqué révoqué (et conservé jusqu'à
+    // son expiration pour détecter une réutilisation). Si deux requêtes
+    // l'échangent en même temps, une seule passe le filtre revokedAt = null.
+    const { count } = await this.prisma.refreshToken.updateMany({
+      where: { tokenHash, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    if (count !== 1) {
+      throw new UnauthorizedException('Refresh token déjà utilisé.');
+    }
 
     return this.issueTokens(storedToken.user);
   }
@@ -243,6 +271,11 @@ export class AuthService {
 
     await this.prisma.refreshToken.create({
       data: { userId: user.id, tokenHash, expiresAt },
+    });
+    // Sprint 20 : les jetons révoqués sont conservés jusqu'à leur expiration
+    // (détection de réutilisation) ; on purge ensuite ceux qui ont expiré.
+    await this.prisma.refreshToken.deleteMany({
+      where: { userId: user.id, expiresAt: { lt: new Date() } },
     });
 
     return {

@@ -1,84 +1,190 @@
-# ─── Valeurs par défaut — surcharger par environnement ───────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# chess-platform — valeurs par défaut (sprint 19)
+#
+# Déploie : API NestJS · moteur IA Stockfish · client Web Flutter · PostgreSQL
+# · Redis · Ingress (TLS cert-manager) · Job de migration du schéma ·
+# NetworkPolicies · supervision Prometheus / Grafana (facultative).
+#
+# Exemple de production : values-production.example.yaml
+# Guide complet       : docs/deployment.md
+# ─────────────────────────────────────────────────────────────────────────────
 
 global:
-  imageRegistry:  ""
-  imageTag:       "latest"
-  imagePullPolicy: Always
-  namespace:      chess
+  # Préfixe des images, AVEC la barre finale et en minuscules (exigence GHCR) :
+  # "ghcr.io/islain99/" → ghcr.io/islain99/chess-api:<tag>
+  imageRegistry: ""
+  # Tag commun aux trois images (la CI passe sha-<commit> ou le tag Git vX.Y.Z)
+  imageTag: latest
+  imagePullPolicy: IfNotPresent
+  # Secrets docker-registry si les images sont privées : [{ name: ghcr-pull }]
+  imagePullSecrets: []
 
+# ─── API NestJS (REST + Socket.IO) ───────────────────────────────────────────
 api:
-  enabled:  true
+  enabled: true
+  # Ignoré quand l'autoscaling est actif (le HPA décide)
   replicas: 2
   image:
     repository: chess-api
-    tag:        ""  # hérite de global.imageTag
+    tag: ""   # vide = global.imageTag
   resources:
     requests: { cpu: 250m, memory: 256Mi }
-    limits:   { cpu: 1,    memory: 512Mi }
+    limits:   { cpu: "1",  memory: 512Mi }
   autoscaling:
-    enabled:     true
+    enabled: true
     minReplicas: 2
     maxReplicas: 10
-    targetCPU:   70
+    targetCPU: 70
+  # Plusieurs réplicas : Socket.IO passe par l'adaptateur Redis, la présence
+  # des joueurs et les propositions de nulle sont partagées (sprint 19).
   env:
     NODE_ENV:    production
     PORT:        "3000"
-    CORS_ORIGIN: "https://chess.example.com"
+    # Nombre de proxys de confiance devant l'API (l'ingress) : IP réelle des
+    # clients pour la limitation de débit.
+    TRUST_PROXY: "1"
+    CORS_ORIGIN: ""   # vide = https://<ingress.host>
     # ─── OAuth (sprint 15) — identifiants PUBLICS, vide = fournisseur désactivé
     GOOGLE_CLIENT_IDS:     ""   # client IDs Web, iOS, macOS séparés par des virgules
     APPLE_CLIENT_IDS:      ""   # bundle ID iOS/macOS + Services ID (Android/Web)
     APPLE_ANDROID_PACKAGE: "com.islain99.chess_client"
     FACEBOOK_APP_ID:       ""
     # ─── Push (sprint 16) : lien ouvert au clic sur une notification Web
-    PUBLIC_WEB_URL:        "https://chess.example.com"
+    PUBLIC_WEB_URL:        ""   # vide = https://<ingress.host>
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
+# ─── Moteur IA (Stockfish + worker d'analyse BullMQ) ─────────────────────────
 aiEngine:
-  enabled:  true
+  enabled: true
   replicas: 2
   image:
     repository: chess-ai-engine
-    tag:        ""
+    tag: ""
   resources:
     requests: { cpu: 500m, memory: 512Mi }
-    limits:   { cpu: 2,    memory: 1Gi  }
+    limits:   { cpu: "2",  memory: 1Gi }
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPU: 75
   stockfishPath: /usr/bin/stockfish
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
+# ─── Client Web Flutter (Nginx non-root, port 8080) ──────────────────────────
+# Les URL de l'API sont figées dans l'image à la compilation (variables de
+# dépôt CLIENT_API_URL / CLIENT_WS_URL de la CI) : https://<host>/api/v1 et
+# https://<host>.
+client:
+  enabled: true
+  replicas: 2
+  image:
+    repository: chess-client
+    tag: ""
+  resources:
+    requests: { cpu: 25m,  memory: 32Mi }
+    limits:   { cpu: 250m, memory: 128Mi }
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# ─── PostgreSQL intégré (StatefulSet) ────────────────────────────────────────
+# Pour une base managée (RDS, Cloud SQL…) : enabled: false et
+# secrets.databaseUrl: "postgresql://…".
 postgresql:
-  enabled:  true
+  enabled: true
+  image: postgres:16-alpine
   auth:
     username: chess
     database: chess
-    existingSecret: postgres-secret
-  primary:
-    persistence:
-      size: 20Gi
+    password: ""   # vide = généré au premier déploiement puis conservé
+  persistence:
+    size: 20Gi
+    storageClass: ""   # vide = classe par défaut du cluster
+  resources:
+    requests: { cpu: 250m, memory: 256Mi }
+    limits:   { cpu: "1",  memory: 1Gi }
 
+# ─── Redis intégré (file BullMQ, matchmaking, Socket.IO, nulles) ─────────────
+# Pour un Redis managé : enabled: false et secrets.redisUrl: "redis://…".
 redis:
-  enabled:  true
-  architecture: standalone
+  enabled: true
+  image: redis:7-alpine
   auth:
-    enabled: false
-  master:
-    resources:
-      limits: { memory: 256Mi }
+    password: ""   # vide = généré au premier déploiement puis conservé
+  # Persistance AOF : la file de matchmaking et les analyses en attente
+  # survivent à un redémarrage de Redis.
+  persistence:
+    enabled: true
+    size: 2Gi
+    storageClass: ""
+  resources:
+    requests: { cpu: 50m,  memory: 64Mi }
+    limits:   { cpu: 500m, memory: 256Mi }
 
+# ─── Migration du schéma (Job Helm, `prisma db push`) ────────────────────────
+# Exécutée après l'installation et avant chaque mise à jour. Un changement
+# destructeur (colonne supprimée…) fait ÉCHOUER la mise à jour au lieu de
+# perdre des données.
+migration:
+  enabled: true
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+
+# ─── Ingress ─────────────────────────────────────────────────────────────────
+# /api et /socket.io → API ; tout le reste → client Web.
 ingress:
-  enabled:   true
+  enabled: true
   className: nginx
-  host:      chess.example.com
+  host: chess.example.com
+  annotations: {}
   tls:
-    enabled:    true
+    enabled: true
     secretName: chess-tls
+    # ClusterIssuer cert-manager ; vide = certificat fourni à la main
     certIssuer: letsencrypt-prod
 
-monitoring:
-  enabled: false  # activer pour Prometheus + Grafana
+# ─── NetworkPolicies : Postgres et Redis joignables par l'API et l'IA seulement
+networkPolicy:
+  enabled: true
 
+# ─── Supervision (Prometheus Operator / kube-prometheus-stack) ───────────────
+# Les ressources ServiceMonitor / PrometheusRule ne sont créées que si leurs
+# CRD sont installées dans le cluster. /metrics n'est PAS exposé par l'ingress.
+monitoring:
+  enabled: false
+  serviceMonitor:
+    interval: 30s
+    # Étiquettes attendues par le Prometheus de kube-prometheus-stack
+    labels:
+      release: kube-prometheus-stack
+  prometheusRule:
+    enabled: true
+    labels:
+      release: kube-prometheus-stack
+  grafanaDashboard:
+    enabled: true
+    # Étiquette surveillée par le sidecar Grafana de kube-prometheus-stack
+    labels:
+      grafana_dashboard: "1"
+
+# ─── Secrets ─────────────────────────────────────────────────────────────────
+# Laisser vide = générés au premier déploiement et CONSERVÉS ensuite.
+# Les fournir via --set / un fichier non versionné / un gestionnaire de secrets.
 secrets:
-  # À fournir via --set ou un secret manager en production
-  jwtAccessSecret:  "CHANGE_ME_IN_PROD"
-  jwtRefreshSecret: "CHANGE_ME_IN_PROD"
-  databaseUrl:      "postgresql://chess:chess@postgres:5432/chess"
-  redisUrl:         "redis://redis:6379"
-  facebookAppSecret: ""   # sprint 15 — App Secret Meta (--set secrets.facebookAppSecret=…)
+  # Nom d'un Secret existant contenant toutes les clés (voir docs/deployment.md) ;
+  # le chart n'en crée alors aucun.
+  existingSecret: ""
+  jwtAccessSecret: ""     # ≥ 32 caractères ; vide = généré
+  jwtRefreshSecret: ""    # réservé (jetons de rafraîchissement non signés par JWT)
+  databaseUrl: ""         # obligatoire si postgresql.enabled=false
+  redisUrl: ""            # obligatoire si redis.enabled=false
+  facebookAppSecret: ""   # sprint 15 — App Secret Meta
   fcmServiceAccount: ""   # sprint 16 — JSON du compte de service Firebase, en base64

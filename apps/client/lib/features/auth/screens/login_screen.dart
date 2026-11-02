@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import '../../../core/theme/app_theme.dart';
 import '../providers/auth_provider.dart';
+import 'auth_error_messages.dart';
 import '../widgets/oauth_buttons.dart';
 import 'register_screen.dart';
 
@@ -161,7 +162,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final auth = ref.read(authProvider);
     if (auth.hasError) {
       setState(() {
-        _error   = 'Identifiants invalides. Vérifiez votre e-mail et mot de passe.';
+        _error   = loginErrorMessage(auth.error);
         _loading = false;
       });
     } else if (auth.valueOrNull?.isLoggedIn ?? false) {

@@ -1,0 +1,100 @@
+{{- /* ───────────────────────────────────────────────────────────────────────
+     Sprint 19 — Client Web Flutter (Nginx non-root) : Deployment, Service, PDB
+     ─────────────────────────────────────────────────────────────────────── */}}
+{{- if .Values.client.enabled }}
+{{- $ctx := dict "root" . "name" "client" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "chess.component" $ctx }}
+  labels:
+    {{- include "chess.labels" $ctx | nindent 4 }}
+spec:
+  replicas: {{ .Values.client.replicas }}
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  selector:
+    matchLabels:
+      {{- include "chess.selectorLabels" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "chess.labels" $ctx | nindent 8 }}
+      {{- with .Values.client.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- include "chess.imagePullSecrets" . | nindent 6 }}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101   # utilisateur nginx de l'image nginx-unprivileged
+        runAsGroup: 101
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: client
+          image: {{ include "chess.image" (dict "root" . "image" .Values.client.image) | quote }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 20
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 5
+          securityContext:
+            {{- include "chess.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            # PID et fichiers temporaires de nginx-unprivileged
+            - { name: tmp, mountPath: /tmp }
+          resources:
+            {{- toYaml .Values.client.resources | nindent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.client.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.client.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.client.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "chess.component" $ctx }}
+  labels:
+    {{- include "chess.labels" $ctx | nindent 4 }}
+spec:
+  selector:
+    {{- include "chess.selectorLabels" $ctx | nindent 4 }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+{{- if gt (int .Values.client.replicas) 1 }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "chess.component" $ctx }}
+  labels:
+    {{- include "chess.labels" $ctx | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "chess.selectorLabels" $ctx | nindent 6 }}
+{{- end }}
+{{- end }}

@@ -164,7 +164,17 @@ class ApiClient {
     throw ApiException(
       statusCode: response.statusCode,
       error: body['error']?.toString() ?? 'ERROR',
-      message: body['message']?.toString() ?? 'Erreur inconnue.',
+      message: _messageOf(body['message']),
     );
+  }
+
+  /// Sprint 20 : la validation NestJS renvoie une LISTE de messages ; elle
+  /// s'affichait « [a, b] ». Les messages sont désormais joints, un par ligne.
+  static String _messageOf(Object? message) {
+    if (message is List) {
+      final parts = message.map((m) => m.toString()).where((m) => m.isNotEmpty).toList();
+      return parts.isEmpty ? 'Erreur inconnue.' : parts.join('\n');
+    }
+    return message?.toString() ?? 'Erreur inconnue.';
   }
 }

@@ -4,6 +4,7 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NotificationType, PushPlatform } from '../../common/prisma-enums';
+import { MetricsService } from '../../metrics/metrics.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { FcmService } from './fcm.service';
 import { NotificationPayload, renderPushMessage } from './push-messages';
@@ -21,6 +22,8 @@ export class PushService {
     private readonly prisma: PrismaService,
     private readonly fcm: FcmService,
     @Optional() config?: ConfigService,
+    // Sprint 19 : compteur chess_api_push_notifications_total{result}.
+    @Optional() private readonly metrics?: MetricsService,
   ) {
     const base = config?.get<string>('PUBLIC_WEB_URL')?.trim().replace(/\/+$/, '');
     this.webBaseUrl = base || null;
@@ -86,6 +89,7 @@ export class PushService {
       message.link = this.webBaseUrl && message.link ? `${this.webBaseUrl}${message.link}` : undefined;
       const results = await Promise.all(devices.map((d) => this.fcm.send(d.token, message)));
 
+      for (const r of results) this.metrics?.pushResult(r);
       const invalid = devices.filter((_, i) => results[i] === 'invalid-token').map((d) => d.token);
       if (invalid.length > 0) {
         await this.prisma.pushDevice.deleteMany({ where: { token: { in: invalid } } });

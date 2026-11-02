@@ -51,7 +51,8 @@ const mockPrisma = {
     findUnique:  jest.fn(),
     create:      jest.fn(),
     delete:      jest.fn(),
-    deleteMany:  jest.fn(),
+    deleteMany:  jest.fn().mockResolvedValue({ count: 0 }),
+    updateMany:  jest.fn(),
   },
 };
 
@@ -64,8 +65,9 @@ const mockJwt = {
 // ─── Mock bcryptjs ────────────────────────────────────────────────────────────
 
 jest.mock('bcryptjs', () => ({
-  hash:    jest.fn().mockResolvedValue('hashed-password'),
-  compare: jest.fn(),
+  hash:     jest.fn().mockResolvedValue('hashed-password'),
+  hashSync: jest.fn().mockReturnValue('dummy-hash'),
+  compare:  jest.fn(),
 }));
 
 import * as bcrypt from 'bcryptjs';
@@ -148,20 +150,44 @@ describe('AuthService', () => {
         service.login({ email: 'alice@example.com', password: 'wrong' }),
       ).rejects.toThrow(UnauthorizedException);
     });
+
+    it('compte inconnu : bcrypt est tout de même appelé (pas d\'indice par la durée)', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+      await expect(
+        service.login({ email: 'nobody@example.com', password: 'x' }),
+      ).rejects.toThrow('Identifiants invalides.');
+      expect(bcrypt.compare).toHaveBeenCalledWith('x', 'dummy-hash');
+    });
+
+    it('compte désactivé : connexion par mot de passe refusée', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ ...mockUser, isActive: false });
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+      await expect(
+        service.login({ email: 'alice@example.com', password: 'SecureP@ss1' }),
+      ).rejects.toThrow(/désactivé/);
+      expect(mockPrisma.refreshToken.create).not.toHaveBeenCalled();
+    });
   });
 
   // ─── refresh ─────────────────────────────────────────────────────────────────
 
   describe('refresh()', () => {
-    it('émet de nouveaux tokens et supprime l\'ancien', async () => {
+    it('rotation : marque l\'ancien jeton révoqué (sans le supprimer) et en émet un nouveau', async () => {
       mockPrisma.refreshToken.findUnique.mockResolvedValue(mockRefreshToken);
-      mockPrisma.refreshToken.delete.mockResolvedValue(mockRefreshToken);
+      mockPrisma.refreshToken.updateMany.mockResolvedValue({ count: 1 });
       mockPrisma.refreshToken.create.mockResolvedValue(mockRefreshToken);
 
       const result = await service.refresh('some-valid-uuid');
 
       expect(result.accessToken).toBe('mock-access-token');
-      expect(mockPrisma.refreshToken.delete).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { tokenHash: expect.any(String), revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
+      });
+      expect(mockPrisma.refreshToken.delete).not.toHaveBeenCalled();
       expect(mockPrisma.refreshToken.create).toHaveBeenCalledTimes(1);
     });
 
@@ -173,17 +199,58 @@ describe('AuthService', () => {
       );
     });
 
-    it('lève UnauthorizedException et purge si le token est révoqué', async () => {
+    it('réutilisation d\'un jeton déjà échangé : toutes les sessions sont fermées', async () => {
       mockPrisma.refreshToken.findUnique.mockResolvedValue({
         ...mockRefreshToken,
         revokedAt: new Date(),
       });
-      mockPrisma.refreshToken.deleteMany.mockResolvedValue({ count: 1 });
+      mockPrisma.refreshToken.deleteMany.mockResolvedValue({ count: 3 });
 
-      await expect(service.refresh('revoked-token')).rejects.toThrow(
-        UnauthorizedException,
-      );
-      expect(mockPrisma.refreshToken.deleteMany).toHaveBeenCalledTimes(1);
+      await expect(service.refresh('revoked-token')).rejects.toThrow(/déjà utilisé/);
+      expect(mockPrisma.refreshToken.deleteMany).toHaveBeenCalledWith({
+        where: { userId: 'user-uuid-1' },
+      });
+      expect(mockPrisma.refreshToken.create).not.toHaveBeenCalled();
+    });
+
+    it('échange concurrent : la requête perdante est refusée', async () => {
+      mockPrisma.refreshToken.findUnique.mockResolvedValue(mockRefreshToken);
+      mockPrisma.refreshToken.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.refresh('raced-token')).rejects.toThrow(UnauthorizedException);
+      expect(mockPrisma.refreshToken.create).not.toHaveBeenCalled();
+    });
+
+    it('jeton expiré : supprimé, sans fermer les autres sessions', async () => {
+      mockPrisma.refreshToken.findUnique.mockResolvedValue({
+        ...mockRefreshToken,
+        expiresAt: new Date(Date.now() - 1000),
+      });
+
+      await expect(service.refresh('expired-token')).rejects.toThrow(/expiré/);
+      expect(mockPrisma.refreshToken.delete).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.refreshToken.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('compte désactivé : pas de nouveau jeton', async () => {
+      mockPrisma.refreshToken.findUnique.mockResolvedValue({
+        ...mockRefreshToken,
+        user: { ...mockUser, isActive: false },
+      });
+
+      await expect(service.refresh('valid-token')).rejects.toThrow(/désactivé/);
+      expect(mockPrisma.refreshToken.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('chaque émission purge les jetons expirés de l\'utilisateur', async () => {
+      mockPrisma.refreshToken.findUnique.mockResolvedValue(mockRefreshToken);
+      mockPrisma.refreshToken.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.refresh('some-valid-uuid');
+
+      expect(mockPrisma.refreshToken.deleteMany).toHaveBeenCalledWith({
+        where: { userId: 'user-uuid-1', expiresAt: { lt: expect.any(Date) } },
+      });
     });
   });
 

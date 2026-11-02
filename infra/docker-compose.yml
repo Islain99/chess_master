@@ -4,6 +4,15 @@
 #
 # Sprint 13 : ajout du service « client » (Flutter Web servi par Nginx)
 #   → http://localhost:8080
+#
+# Sprint 19 :
+#   • JWT_ACCESS_SECRET OBLIGATOIRE pour l'API (elle refuse désormais de
+#     démarrer en production sans secret solide) — à mettre dans infra/.env :
+#       JWT_ACCESS_SECRET=<openssl rand -hex 32>
+#   • service « migrate » : crée / met à jour les tables (prisma db push)
+#     avant le démarrage de l'API
+#   • Postgres et Redis publiés sur 127.0.0.1 uniquement (plus sur le réseau)
+#   • client servi par Nginx non-root sur le port 8080 du conteneur
 # ─────────────────────────────────────────────────────────────────────────────
 services:
   postgres:
@@ -13,7 +22,7 @@ services:
       POSTGRES_PASSWORD: chess
       POSTGRES_DB: chess
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -25,7 +34,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -53,11 +62,27 @@ services:
       timeout: 5s
       retries: 5
 
+  # ─── Sprint 19 : schéma de base appliqué avant l'API (puis s'arrête) ──────
+  migrate:
+    image: chess-api:local
+    build:
+      context: ../apps/api
+    command: ["npm", "run", "db:push"]
+    environment:
+      DATABASE_URL: postgresql://chess:chess@postgres:5432/chess
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   api:
+    image: chess-api:local
     build:
       context: ../apps/api
     environment:
       DATABASE_URL: postgresql://chess:chess@postgres:5432/chess
+      # Vide → l'API refuse de démarrer et l'indique dans ses logs (sprint 19)
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-}
       REDIS_URL: redis://redis:6379
       AI_ENGINE_URL: http://ai-engine:3001
       PORT: 3000
@@ -80,6 +105,13 @@ services:
         condition: service_healthy
       ai-engine:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/v1/health/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # ─── Sprint 13 : client Web ────────────────────────────────────────────────
   # Le navigateur appelle l'API depuis la machine hôte → URL en localhost:3000
@@ -91,7 +123,7 @@ services:
         API_URL: http://localhost:3000/api/v1
         WS_URL: http://localhost:3000
     ports:
-      - "8080:80"
+      - "8080:8080"
     depends_on:
       - api
 

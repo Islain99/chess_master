@@ -1,0 +1,67 @@
+{{- /* ───────────────────────────────────────────────────────────────────────
+     Sprint 19 — Ingress unique pour le domaine public
+       /api/…        → API (REST)
+       /socket.io/…  → API (WebSocket, délais longs pour les parties)
+       /…            → client Web
+     Avant : tout allait à l'API (le client Web n'était pas servi) et une
+     annotation configuration-snippet était utilisée — refusée par défaut par
+     ingress-nginx ≥ 1.9 (risque d'injection de configuration).
+     /metrics n'est volontairement PAS routé (lecture interne par Prometheus).
+     ─────────────────────────────────────────────────────────────────────── */}}
+{{- if .Values.ingress.enabled }}
+{{- $ctx := dict "root" . "name" "ingress" }}
+{{- $api := include "chess.component" (dict "root" . "name" "api") }}
+{{- $client := include "chess.component" (dict "root" . "name" "client") }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "chess.fullname" . }}
+  labels:
+    {{- include "chess.labels" $ctx | nindent 4 }}
+  annotations:
+    {{- if and .Values.ingress.tls.enabled .Values.ingress.tls.certIssuer }}
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.tls.certIssuer | quote }}
+    {{- end }}
+    {{- if eq .Values.ingress.className "nginx" }}
+    # WebSocket : connexions longues (une partie classique dure jusqu'à 1 h+)
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # Avatars et corps JSON (limite large mais bornée)
+    nginx.ingress.kubernetes.io/proxy-body-size: "2m"
+    {{- if .Values.ingress.tls.enabled }}
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    {{- end }}
+    {{- end }}
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts: [{{ .Values.ingress.host | quote }}]
+      secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          {{- if .Values.api.enabled }}
+          - path: /api
+            pathType: Prefix
+            backend:
+              service: { name: {{ $api }}, port: { name: http } }
+          - path: /socket.io
+            pathType: Prefix
+            backend:
+              service: { name: {{ $api }}, port: { name: http } }
+          {{- end }}
+          {{- if .Values.client.enabled }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: {{ $client }}, port: { name: http } }
+          {{- end }}
+{{- end }}

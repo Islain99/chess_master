@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import '../../../core/theme/app_theme.dart';
 import '../providers/auth_provider.dart';
+import 'auth_error_messages.dart';
 
 /// Écran d'inscription — email, mot de passe, nom d'affichage.
 class RegisterScreen extends ConsumerStatefulWidget {
@@ -133,6 +134,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       setState(() => _error = 'Tous les champs sont obligatoires.');
       return;
     }
+    // Sprint 20 : mêmes règles que le serveur (RegisterDto), vérifiées avant l'envoi.
+    if (name.length < 2 || name.length > 32) {
+      setState(() => _error = 'Le nom d\'affichage doit comporter entre 2 et 32 caractères.');
+      return;
+    }
     if (password.length < 8) {
       setState(() => _error = 'Le mot de passe doit comporter au moins 8 caractères.');
       return;
@@ -152,7 +158,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     final auth = ref.read(authProvider);
     if (auth.hasError) {
       setState(() {
-        _error   = 'Inscription échouée. Cet e-mail est peut-être déjà utilisé.';
+        _error   = registerErrorMessage(auth.error);
         _loading = false;
       });
     } else if (auth.valueOrNull?.isLoggedIn ?? false) {

@@ -1,8 +1,10 @@
 apiVersion: v2
 name: chess-platform
-description: Jeu d'échecs multiplateforme — NestJS + Flutter
+description: Jeu d'échecs multiplateforme — API NestJS, moteur Stockfish, client Web Flutter
 type: application
-version: 1.0.0
+# Sprint 19 : chart complet (2.0.0). La 1.0.0 ne déployait que l'API et
+# référençait un Secret qui n'était jamais créé.
+version: 2.0.0
 appVersion: "1.0.0"
 maintainers:
   - name: chess-team
@@ -11,3 +13,4 @@ keywords:
   - nestjs
   - flutter
   - socket.io
+  - stockfish

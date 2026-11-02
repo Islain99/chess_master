@@ -1,0 +1,75 @@
+{{- /* ───────────────────────────────────────────────────────────────────────
+     Sprint 19 — Migration du schéma Prisma (hook Helm)
+     post-install : la base vient d'être créée par ce même déploiement.
+     pre-upgrade  : le schéma est à jour AVANT que les nouveaux pods de l'API
+                    ne démarrent.
+     `prisma db push` sans --accept-data-loss : un changement destructeur fait
+     échouer la mise à jour (rien n'est perdu ; les anciens pods continuent).
+     ─────────────────────────────────────────────────────────────────────── */}}
+{{- if and .Values.migration.enabled .Values.api.enabled }}
+{{- $ctx := dict "root" . "name" "migrate" }}
+{{- $secret := include "chess.secretName" . }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "chess.component" $ctx }}
+  labels:
+    {{- include "chess.labels" $ctx | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,pre-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.migration.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.migration.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "chess.labels" $ctx | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      {{- include "chess.imagePullSecrets" . | nindent 6 }}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      {{- if .Values.postgresql.enabled }}
+      initContainers:
+        # Attend que Postgres accepte les connexions (premier déploiement)
+        - name: wait-for-postgres
+          image: {{ .Values.postgresql.image | quote }}
+          command:
+            - sh
+            - -c
+            - until pg_isready -h {{ include "chess.component" (dict "root" . "name" "postgres") }} -p 5432 -U {{ .Values.postgresql.auth.username }}; do echo "Postgres pas encore prêt…"; sleep 3; done
+          securityContext:
+            {{- include "chess.containerSecurityContext" . | nindent 12 }}
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits:   { cpu: 100m, memory: 64Mi }
+      {{- end }}
+      containers:
+        - name: migrate
+          image: {{ include "chess.image" (dict "root" . "image" .Values.api.image) | quote }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          command: ["npm", "run", "db:push"]
+          env:
+            - { name: HOME, value: /tmp }
+            - { name: npm_config_cache, value: /tmp/.npm }
+            - { name: NPM_CONFIG_UPDATE_NOTIFIER, value: "false" }
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: {{ $secret }}, key: DATABASE_URL }
+          securityContext:
+            {{- include "chess.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits:   { cpu: 500m, memory: 512Mi }
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

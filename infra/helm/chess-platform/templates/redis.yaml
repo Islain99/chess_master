@@ -1,0 +1,106 @@
+{{- /* ───────────────────────────────────────────────────────────────────────
+     Sprint 19 — Redis intégré (StatefulSet, mot de passe, AOF facultatif)
+     Utilisé par : BullMQ (analyses), matchmaking, adaptateur Socket.IO,
+     propositions de nulle. maxmemory-policy noeviction : BullMQ l'exige
+     (une éviction ferait disparaître des tâches en silence).
+     ─────────────────────────────────────────────────────────────────────── */}}
+{{- if .Values.redis.enabled }}
+{{- $ctx := dict "root" . "name" "redis" }}
+{{- $r := .Values.redis }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "chess.component" $ctx }}
+  labels:
+    {{- include "chess.labels" $ctx | nindent 4 }}
+spec:
+  serviceName: {{ include "chess.component" $ctx }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "chess.selectorLabels" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "chess.labels" $ctx | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999   # utilisateur redis de l'image officielle
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: redis
+          image: {{ $r.image | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c"]
+          args:
+            - >-
+              exec redis-server
+              --requirepass "$REDIS_PASSWORD"
+              --maxmemory-policy noeviction
+              --dir /data
+              {{- if $r.persistence.enabled }}
+              --appendonly yes
+              {{- else }}
+              --appendonly no --save ""
+              {{- end }}
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: {{ include "chess.secretName" . }}, key: REDIS_PASSWORD }
+            # Utilisé par redis-cli dans les sondes (pas de mot de passe en clair)
+            - name: REDISCLI_AUTH
+              valueFrom:
+                secretKeyRef: { name: {{ include "chess.secretName" . }}, key: REDIS_PASSWORD }
+          ports:
+            - name: redis
+              containerPort: 6379
+          readinessProbe:
+            exec: { command: ["redis-cli", "ping"] }
+            periodSeconds: 5
+          livenessProbe:
+            exec: { command: ["redis-cli", "ping"] }
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          securityContext:
+            {{- include "chess.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - { name: data, mountPath: /data }
+          resources:
+            {{- toYaml $r.resources | nindent 12 }}
+      {{- if not $r.persistence.enabled }}
+      volumes:
+        - name: data
+          emptyDir: {}
+      {{- end }}
+  {{- if $r.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with $r.persistence.storageClass }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ $r.persistence.size }}
+  {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "chess.component" $ctx }}
+  labels:
+    {{- include "chess.labels" $ctx | nindent 4 }}
+spec:
+  selector:
+    {{- include "chess.selectorLabels" $ctx | nindent 4 }}
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+{{- end }}

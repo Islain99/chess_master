@@ -1,0 +1,110 @@
+{{- /* ───────────────────────────────────────────────────────────────────────
+     Sprint 19 — Supervision Prometheus / Grafana
+     Suppose kube-prometheus-stack (Prometheus Operator) dans le cluster.
+     ServiceMonitor et PrometheusRule ne sont rendus que si leurs CRD existent
+     (sinon NOTES.txt le signale) : le chart reste installable partout.
+     ─────────────────────────────────────────────────────────────────────── */}}
+{{- if .Values.monitoring.enabled }}
+{{- $m := .Values.monitoring }}
+{{- if .Capabilities.APIVersions.Has "monitoring.coreos.com/v1/ServiceMonitor" }}
+{{- range $name, $enabled := dict "api" $.Values.api.enabled "ai-engine" $.Values.aiEngine.enabled }}
+{{- if $enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "chess.component" (dict "root" $ "name" $name) }}
+  labels:
+    {{- include "chess.labels" (dict "root" $ "name" $name) | nindent 4 }}
+    {{- with $m.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "chess.selectorLabels" (dict "root" $ "name" $name) | nindent 6 }}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ $m.serviceMonitor.interval }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if and $m.prometheusRule.enabled (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1/PrometheusRule") }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "chess.fullname" . }}
+  labels:
+    {{- include "chess.labels" (dict "root" . "name" "monitoring") | nindent 4 }}
+    {{- with $m.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: chess-platform
+      rules:
+        - alert: ChessApiDown
+          expr: absent(up{job="{{ include "chess.component" (dict "root" . "name" "api") }}"} == 1)
+          for: 2m
+          labels: { severity: critical }
+          annotations:
+            summary: Aucun pod de l'API d'échecs ne répond
+            description: Prometheus ne parvient à collecter aucune instance de l'API depuis 2 minutes.
+        - alert: ChessApiHigh5xxRate
+          expr: |
+            sum(rate(chess_api_http_requests_total{status=~"5.."}[5m]))
+              / clamp_min(sum(rate(chess_api_http_requests_total[5m])), 1e-9) > 0.05
+          for: 10m
+          labels: { severity: warning }
+          annotations:
+            summary: Plus de 5 % d'erreurs 5xx sur l'API
+            description: "Taux d'erreurs serveur : {{`{{ $value | humanizePercentage }}`}}"
+        - alert: ChessApiSlowRequests
+          expr: |
+            histogram_quantile(0.95, sum by (le) (rate(chess_api_http_request_duration_seconds_bucket[5m]))) > 1
+          for: 10m
+          labels: { severity: warning }
+          annotations:
+            summary: Latence p95 de l'API supérieure à 1 s
+            description: "p95 actuel : {{`{{ $value | humanizeDuration }}`}}"
+        - alert: ChessAiEngineErrors
+          expr: |
+            sum(rate(chess_ai_bestmove_duration_seconds_count{result="error"}[5m]))
+              / clamp_min(sum(rate(chess_ai_bestmove_duration_seconds_count[5m])), 1e-9) > 0.1
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: Plus de 10 % des coups de l'IA échouent
+            description: Stockfish indisponible ou saturé (l'API se rabat sur l'IA locale).
+        - alert: ChessAnalysisFailures
+          expr: increase(chess_ai_analysis_jobs_total{result="failed"}[30m]) > 3
+          labels: { severity: warning }
+          annotations:
+            summary: Analyses de parties en échec
+            description: "{{`{{ $value }}`}} analyses ont échoué en 30 minutes."
+        - alert: ChessPodRestarting
+          expr: |
+            increase(kube_pod_container_status_restarts_total{namespace="{{ .Release.Namespace }}", pod=~"{{ include "chess.fullname" . }}-.*"}[30m]) > 3
+          labels: { severity: warning }
+          annotations:
+            summary: Un pod redémarre en boucle
+            description: "{{`{{ $labels.pod }}`}} a redémarré plus de 3 fois en 30 minutes."
+{{- end }}
+{{- if $m.grafanaDashboard.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "chess.fullname" . }}-dashboard
+  labels:
+    {{- include "chess.labels" (dict "root" . "name" "monitoring") | nindent 4 }}
+    {{- with $m.grafanaDashboard.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+data:
+  chess-platform.json: |-
+    {{- .Files.Get "files/grafana-dashboard.json" | nindent 4 }}
+{{- end }}
+{{- end }}

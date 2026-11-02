@@ -4,6 +4,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { StockfishAnalysisService } from './stockfish-analysis.service';
+import { MetricsService } from '../metrics/metrics.service';
 
 export const ANALYSIS_QUEUE = 'analysis';
 
@@ -41,11 +42,17 @@ export class AnalysisProcessor extends WorkerHost {
   constructor(
     private readonly stockfish: StockfishAnalysisService,
     private readonly prisma: PrismaService,
+    private readonly metrics: MetricsService,
   ) {
     super();
   }
 
+  /** Sprint 19 : chaque analyse est chronométrée et comptée (completed / failed). */
   async process(job: Job<AnalysisJobData>): Promise<void> {
+    return this.metrics.timeAnalysis(() => this.analyse(job));
+  }
+
+  private async analyse(job: Job<AnalysisJobData>): Promise<void> {
     const { gameId, engineDepth, moves } = job.data;
     this.logger.log(`Analyse démarrée : partie ${gameId} (${moves.length} coups, d=${engineDepth})`);
 

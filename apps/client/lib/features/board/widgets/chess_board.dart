@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/settings/board_theme.dart';
+import '../../../core/settings/settings_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../models/board_position.dart';
 import '../models/chess_move.dart';
@@ -9,7 +12,12 @@ import 'chess_square.dart';
 /// Les coordonnées (a–h, 1–8) sont insérées directement dans les cases
 /// de bordure (coin supérieur-gauche pour les rangées, coin inférieur-droit
 /// pour les colonnes), à la manière de Chess.com — sans modifier le ratio 1:1.
-class ChessBoardWidget extends StatelessWidget {
+///
+/// Sprint 20 : les réglages « Thème du plateau », « Afficher les coordonnées »
+/// et « Afficher les coups légaux » étaient enregistrés mais jamais appliqués
+/// (le plateau restait Classique, coordonnées et points toujours visibles).
+/// Ils sont lus ici, sur tous les plateaux (partie, en ligne, lecteur).
+class ChessBoardWidget extends ConsumerWidget {
   const ChessBoardWidget({
     super.key,
     required this.position,
@@ -20,6 +28,7 @@ class ChessBoardWidget extends StatelessWidget {
     this.lastMove,
     this.inCheckSquare,
     this.flipped = false,
+    this.boardTheme,
   });
 
   final BoardPosition position;
@@ -31,8 +40,14 @@ class ChessBoardWidget extends StatelessWidget {
   final String? inCheckSquare;
   final bool flipped;
 
+  /// Thème imposé (aperçu) ; sinon celui des réglages.
+  final BoardTheme? boardTheme;
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(settingsProvider);
+    final theme = boardTheme ?? settings.boardTheme;
+    final targets = settings.showLegalMoves ? legalTargets : const <String>{};
     return AspectRatio(
       aspectRatio: 1,
       child: LayoutBuilder(
@@ -43,7 +58,12 @@ class ChessBoardWidget extends StatelessWidget {
               return Row(
                 children: List.generate(8, (colIdx) {
                   final square = _squareAt(rowIdx, colIdx);
-                  return _buildSquare(square, squareSize, rowIdx, colIdx);
+                  return _buildSquare(
+                    square, squareSize, rowIdx, colIdx,
+                    theme: theme,
+                    targets: targets,
+                    showCoordinates: settings.showCoordinates,
+                  );
                 }),
               );
             }),
@@ -53,17 +73,27 @@ class ChessBoardWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildSquare(String square, double size, int rowIdx, int colIdx) {
+  Widget _buildSquare(
+    String square,
+    double size,
+    int rowIdx,
+    int colIdx, {
+    required BoardTheme theme,
+    required Set<String> targets,
+    required bool showCoordinates,
+  }) {
     final file = square[0];
     final rank = int.parse(square[1]);
-    final fileIdx = file.codeUnitAt(0) - 'a'.codeUnitAt(0);
-    final isLight = (fileIdx + rank) % 2 == 1;
+    // Sprint 20 : a1 est une case FONCÉE (« blanc à droite »). La formule
+    // précédente ((colonne + rangée) % 2 == 1, colonne comptée depuis 0)
+    // inversait toutes les couleurs du plateau.
+    final isLight = isLightSquare(square);
     final piece = position.pieceAt(square);
 
     // Coordonnées : rangée = colonne 0 en mode normal (colonne 7 en retourné)
     //               colonne = ligne 7 en mode normal (ligne 0 en retourné)
-    final bool showRank = flipped ? (colIdx == 7) : (colIdx == 0);
-    final bool showFile = flipped ? (rowIdx == 0) : (rowIdx == 7);
+    final bool showRank = showCoordinates && (flipped ? (colIdx == 7) : (colIdx == 0));
+    final bool showFile = showCoordinates && (flipped ? (rowIdx == 0) : (rowIdx == 7));
 
     return ChessSquare(
       square: square,
@@ -71,7 +101,7 @@ class ChessBoardWidget extends StatelessWidget {
       pieceCode: piece,
       isLight: isLight,
       isSelected: selectedSquare == square,
-      isLegalTarget: legalTargets.contains(square),
+      isLegalTarget: targets.contains(square),
       isLastMoveSrc: lastMove?.from == square,
       isLastMoveDst: lastMove?.to == square,
       isInCheck: inCheckSquare == square,
@@ -79,7 +109,16 @@ class ChessBoardWidget extends StatelessWidget {
       fileLabel: showFile ? file : null,
       onTap: () => onSquareTap(square),
       onPieceDrop: (from) => onPieceDrop(from, square),
+      boardTheme: theme,
     );
+  }
+
+  /// Case claire ? a1 foncée, h1 claire, a8 claire (colonne + rangée paire,
+  /// colonne a = 1).
+  static bool isLightSquare(String square) {
+    final file = square.codeUnitAt(0) - 'a'.codeUnitAt(0) + 1;
+    final rank = int.parse(square[1]);
+    return (file + rank) % 2 == 1;
   }
 
   String _squareAt(int rowIdx, int colIdx) {
@@ -141,7 +180,9 @@ class PromotionDialog extends StatelessWidget {
                     ),
                     child: Center(
                       child: Text(
-                        symbols[p] ?? p,
+                        // Sprint 20 : sélecteur U+FE0E (présentation texte),
+                        // sinon Android / iOS affichent ♛ en emoji.
+                        '${symbols[p] ?? p}\uFE0E',
                         style: TextStyle(
                           fontSize: 36,
                           color: color == 'w' ? Colors.white : Colors.black,

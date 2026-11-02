@@ -1,0 +1,52 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Exemple de valeurs de PRODUCTION (sprint 19) — copier, adapter, ne PAS y
+# mettre de secrets : les passer par --set ou un Secret existant.
+#
+#   helm upgrade --install chess ./infra/helm/chess-platform \
+#     --namespace chess --create-namespace \
+#     -f infra/helm/chess-platform/values-production.yaml \
+#     --set global.imageTag=v1.0.0 --wait --timeout 10m
+# ─────────────────────────────────────────────────────────────────────────────
+global:
+  imageRegistry: "ghcr.io/islain99/"   # en minuscules, barre finale incluse
+  imagePullSecrets: []                 # [{ name: ghcr-pull }] si images privées
+
+api:
+  autoscaling: { enabled: true, minReplicas: 3, maxReplicas: 12, targetCPU: 70 }
+  env:
+    # CORS_ORIGIN et PUBLIC_WEB_URL : déduits de ingress.host
+    GOOGLE_CLIENT_IDS: ""
+    APPLE_CLIENT_IDS: ""
+    FACEBOOK_APP_ID: ""
+
+aiEngine:
+  autoscaling: { enabled: true, minReplicas: 2, maxReplicas: 6, targetCPU: 75 }
+
+client:
+  replicas: 2
+
+postgresql:
+  persistence:
+    size: 50Gi
+    storageClass: ""          # ex. "gp3", "premium-rwo"
+
+redis:
+  persistence:
+    size: 4Gi
+
+ingress:
+  host: chess.mondomaine.com
+  tls:
+    enabled: true
+    secretName: chess-tls
+    certIssuer: letsencrypt-prod
+
+monitoring:
+  enabled: true
+
+# Secrets : JWT et mots de passe générés automatiquement s'ils sont vides.
+# Pour les fournir (rotation, base managée…) :
+#   --set secrets.jwtAccessSecret="$(openssl rand -hex 32)"
+#   --set secrets.databaseUrl="postgresql://…"   (avec postgresql.enabled=false)
+#   --set secrets.fcmServiceAccount="$(base64 -w0 firebase-sa.json)"
+#   --set secrets.facebookAppSecret="…"

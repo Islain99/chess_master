@@ -1,20 +1,16 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
-import { GlobalExceptionFilter } from './common/global-exception.filter';
-import helmet from 'helmet';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
+import { configureApp } from './app.setup';
+import { assertProductionEnv } from './config/check-production-env';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // Sprint 19 : refuse de démarrer en production avec un secret JWT d'exemple.
+  assertProductionEnv();
 
-  app.use(helmet());
-  app.enableCors({
-    origin: process.env.CORS_ORIGIN?.split(',') ?? '*',
-    credentials: true,
-  });
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
-  app.useGlobalFilters(new GlobalExceptionFilter());
-  app.setGlobalPrefix('api/v1');
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // Sprint 20 : configuration partagée avec les tests end-to-end.
+  await configureApp(app);
 
   const port = process.env.PORT ?? 3000;
   await app.listen(port);

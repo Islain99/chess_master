@@ -28,10 +28,11 @@ chess-platform/
 │   └── client/       # Flutter 6 plateformes
 ├── infra/
 │   ├── docker-compose.yml
-│   ├── k8s/          # Kubernetes manifests
-│   └── helm/         # Helm chart chess-platform
+│   └── helm/         # Helm chart chess-platform (seule source Kubernetes)
 ├── docs/
 │   ├── api-rest-spec.md
+│   ├── deployment.md # Compose, Helm, supervision, CI/CD
+│   ├── testing.md    # unitaires, end-to-end, Flutter
 │   └── websocket-events.md
 └── .github/workflows/ci.yml
 ```
@@ -117,49 +118,45 @@ AI_ENGINE_URL=http://localhost:3001
 | 16 | Notifications push FCM (Android · iOS · macOS · Web) · génération réelle des notifications (tour, fin de partie, salle) — voir [docs/push-setup.md](docs/push-setup.md) |
 | 17 | Sécurité des parties en ligne : jouer / abandonner / accepter la nulle réservé au bon joueur, pendule mesurée par le serveur, Elo à chaque fin de partie classée, forfait réservé aux joueurs |
 | 18 | Lecteur de partie + graphique d'évaluation · reprise de partie · « Mes parties » · thèmes de pièces appliqués · profil et avatars · classification des coups (probabilité de gain) |
+| 19 | Chart Helm complet (IA, client, Postgres, Redis, secrets, migration, NetworkPolicies) · API multi-réplicas (Socket.IO Redis, nulles et appariement partagés) · métriques Prometheus + alertes + tableau de bord Grafana · CI de déploiement réparée — voir [docs/deployment.md](docs/deployment.md) |
+| 20 | Tests : 43 tests end-to-end (HTTP + Socket.IO, partie classée jusqu'au mat, deux réplicas), matchmaking et lobby, widgets Flutter · corrections : détection de vol des refresh tokens, CORS « * », file d'attente à la déconnexion, couleurs et réglages du plateau — voir [docs/testing.md](docs/testing.md) |
 
 ## Tests
+
+Guide complet : **[docs/testing.md](docs/testing.md)**.
 
 ```bash
 cd apps/client
 flutter analyze       # 0 problème
-flutter test          # tests unitaires et de widget
+flutter test          # 105 tests unitaires et de widget
 
 cd apps/api
-npm run test          # 217 tests unitaires et HTTP
-npm run test:e2e      # tests end-to-end (nécessite Postgres)
+npm run test          # 283 tests unitaires
+npm run test:e2e      # 43 tests end-to-end (Postgres + Redis réels, voir le guide)
 npm run lint          # ESLint TypeScript
 npm run build         # compilation TypeScript
 ```
 
 ## Déploiement production
 
-### Kubernetes (Helm)
+Guide complet : **[docs/deployment.md](docs/deployment.md)**.
 
 ```bash
-# Staging
-helm upgrade chess-staging ./infra/helm/chess-platform \
-  --namespace chess-staging --create-namespace \
-  --set global.imageTag=sha-abc123 \
-  --set secrets.jwtAccessSecret="$JWT_SECRET"
+# Docker Compose (un serveur)
+cd infra && echo "JWT_ACCESS_SECRET=$(openssl rand -hex 32)" > .env
+docker compose up --build -d                     # → http://localhost:8080
 
-# Production (tag Git)
-helm upgrade chess ./infra/helm/chess-platform \
+# Kubernetes (Helm) — secrets générés au premier déploiement puis conservés
+helm upgrade --install chess ./infra/helm/chess-platform \
   --namespace chess --create-namespace \
+  -f infra/helm/chess-platform/values-production.example.yaml \
+  --set global.imageRegistry=ghcr.io/islain99/ \
   --set global.imageTag=v1.0.0 \
-  --set api.replicas=3
+  --set ingress.host=chess.mondomaine.com \
+  --wait --timeout 10m
 ```
 
-### Variables secrètes requises (GitHub Secrets)
-
-| Secret | Description |
-|--------|-------------|
-| `JWT_ACCESS_SECRET` | Secret JWT access token |
-| `JWT_REFRESH_SECRET` | Secret JWT refresh token |
-| `DATABASE_URL` | URL PostgreSQL staging |
-| `REDIS_URL` | URL Redis staging |
-| `KUBE_CONFIG` | Base64 kubeconfig staging |
-| `KUBE_CONFIG_PROD` | Base64 kubeconfig production |
+CI/CD : push sur `main` → staging ; tag `vX.Y.Z` → production. Secrets GitHub requis : `KUBE_CONFIG`, `KUBE_CONFIG_PROD` (les autres sont facultatifs, voir le guide).
 
 ## Architecture des niveaux IA
 
@@ -175,7 +172,8 @@ helm upgrade chess ./infra/helm/chess-platform \
 
 - **JWT** : access tokens 15 min, refresh 7 j avec rotation et détection de fuite
 - **Mots de passe** : bcryptjs rounds=10 (→ argon2 en production)
-- **Rate limiting** : 10 req/s et 200 req/min via `@nestjs/throttler`
+- **Rate limiting** : 10 req/s et 300 req/min via `@nestjs/throttler` (IP réelle derrière l'ingress, `TRUST_PROXY`)
+- **Démarrage refusé** en production sans secret JWT solide (≥ 32 caractères)
 - **WS** : 20 coups/5 s via `WsRateLimiter`
 - **CORS** : origines explicites en production
 - **Validation** : `class-validator` + whitelist Prisma côté serveur

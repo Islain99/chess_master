@@ -1,9 +1,10 @@
-import { Logger } from '@nestjs/common';
+import { Logger, OnModuleDestroy, Optional } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
   ConnectedSocket,
   MessageBody,
   OnGatewayConnection,
+  OnGatewayDisconnect,
   OnGatewayInit,
   SubscribeMessage,
   WebSocketGateway,
@@ -15,6 +16,7 @@ import { RatingsService }     from '../ratings/ratings.service';
 import { RoomsService }       from '../rooms/rooms.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { TimeControlCategory } from '../common/prisma-enums';
+import { MetricsService } from '../metrics/metrics.service';
 
 /**
  * Gateway Socket.IO — namespace /lobby.
@@ -25,7 +27,9 @@ import { TimeControlCategory } from '../common/prisma-enums';
  * - Notification des joueurs appariés
  */
 @WebSocketGateway({ namespace: '/lobby', cors: { origin: '*' } })
-export class LobbyGateway implements OnGatewayConnection, OnGatewayInit {
+export class LobbyGateway
+  implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit, OnModuleDestroy
+{
   @WebSocketServer()
   server: Server;
 
@@ -38,7 +42,13 @@ export class LobbyGateway implements OnGatewayConnection, OnGatewayInit {
     private readonly ratings:     RatingsService,
     private readonly jwtService:  JwtService,
     private readonly notifications: NotificationsService, // sprint 16
+    @Optional() private readonly metrics?: MetricsService, // sprint 19
   ) {}
+
+  /** Sprint 19 : la minuterie ne survit plus à l'arrêt du module (tests, SIGTERM). */
+  onModuleDestroy() {
+    clearInterval(this.periodicTimer);
+  }
 
   afterInit() {
     // Vérification périodique de la file toutes les 10 secondes
@@ -58,7 +68,25 @@ export class LobbyGateway implements OnGatewayConnection, OnGatewayInit {
     } catch {
       // Connexion anonyme autorisée (salles privées sans compte)
     }
+    this.metrics?.wsConnected('lobby');
     this.logger.debug(`Lobby connecté : ${client.id}`);
+  }
+
+  /** Sprint 19 : jauge chess_api_ws_connections{namespace="lobby"}. */
+  async handleDisconnect(client: Socket) {
+    this.metrics?.wsDisconnected('lobby');
+    this.logger.debug(`Lobby déconnecté : ${client.id}`);
+
+    // Sprint 20 : quitter l'appli = quitter la file d'attente.
+    const userId = (client as any).userId as string | undefined;
+    if (!userId) return;
+    try {
+      if (await this.matchmaking.dequeueSocket(userId, client.id)) {
+        this.logger.debug(`${userId} retiré de la file (déconnexion)`);
+      }
+    } catch (err) {
+      this.logger.warn(`Retrait de la file impossible pour ${userId} : ${err}`);
+    }
   }
 
   // ──────────────────────────────────────────────
@@ -208,21 +236,22 @@ export class LobbyGateway implements OnGatewayConnection, OnGatewayInit {
   private async notifyMatch(match: Awaited<ReturnType<MatchmakingService['tryMatch']>>) {
     if (!match) return;
 
-    const payload = (color: 'white' | 'black', opponentElo: number) => ({
+    const payload = (color: 'white' | 'black', elo: number, displayName: string | null) => ({
       gameId:      match.gameId,
       color,
-      opponent:    { elo: opponentElo },
+      opponent:    { elo, displayName }, // sprint 20 : nom, comme documenté
       timeControl: match.timeControl,
     });
 
-    // Émettre directement aux sockets par leur ID
+    // Émettre directement aux sockets par leur ID (sur n'importe quel pod,
+    // grâce à l'adaptateur Redis)
     this.server
       .to(match.whiteSocketId)
-      .emit('lobby:matchFound', payload('white', match.blackElo));
+      .emit('lobby:matchFound', payload('white', match.blackElo, match.blackName));
 
     this.server
       .to(match.blackSocketId)
-      .emit('lobby:matchFound', payload('black', match.whiteElo));
+      .emit('lobby:matchFound', payload('black', match.whiteElo, match.whiteName));
 
     this.logger.log(
       `Appariement notifié : partie ${match.gameId} ` +

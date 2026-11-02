@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../core/settings/board_theme.dart';
 import 'chess_piece.dart';
 
@@ -65,8 +64,8 @@ class ChessSquare extends StatelessWidget {
                   child: Container(
                     width: squareSize * 0.28,
                     height: squareSize * 0.28,
-                    decoration: const BoxDecoration(
-                      color: AppTheme.legalMoveDot,
+                    decoration: BoxDecoration(
+                      color: boardTheme.legalDot,
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -79,7 +78,7 @@ class ChessSquare extends StatelessWidget {
                   height: squareSize,
                   decoration: BoxDecoration(
                     border: Border.all(
-                      color: AppTheme.legalMoveDot,
+                      color: boardTheme.legalDot,
                       width: squareSize * 0.08,
                     ),
                     shape: BoxShape.circle,
@@ -147,6 +146,7 @@ class ChessSquare extends StatelessWidget {
     return isLight ? boardTheme.lightSquare : boardTheme.darkSquare;
   }
 
-  /// Les coordonnées contrastent avec la couleur de la case.
-  Color _coordColor() => isLight ? AppTheme.darkSquare : AppTheme.lightSquare;
+  /// Les coordonnées contrastent avec la couleur de la case (sprint 20 :
+  /// couleurs du thème choisi, et plus celles du thème Classique).
+  Color _coordColor() => isLight ? boardTheme.darkSquare : boardTheme.lightSquare;
 }

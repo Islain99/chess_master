@@ -1,0 +1,110 @@
+{{- /* ───────────────────────────────────────────────────────────────────────
+     Sprint 19 — PostgreSQL intégré (StatefulSet + volume persistant)
+     Mot de passe dans le Secret applicatif (généré une fois, conservé).
+     Les données vivent dans un sous-dossier du volume (PGDATA) : le dossier
+     lost+found créé par certains fournisseurs de disques bloquait initdb.
+     ─────────────────────────────────────────────────────────────────────── */}}
+{{- if .Values.postgresql.enabled }}
+{{- $ctx := dict "root" . "name" "postgres" }}
+{{- $pg := .Values.postgresql }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "chess.component" $ctx }}
+  labels:
+    {{- include "chess.labels" $ctx | nindent 4 }}
+spec:
+  serviceName: {{ include "chess.component" $ctx }}-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "chess.selectorLabels" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "chess.labels" $ctx | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70    # utilisateur postgres de l'image Alpine
+        runAsGroup: 70
+        fsGroup: 70
+        seccompProfile: { type: RuntimeDefault }
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: postgres
+          image: {{ $pg.image | quote }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - { name: POSTGRES_USER, value: {{ $pg.auth.username | quote }} }
+            - { name: POSTGRES_DB, value: {{ $pg.auth.database | quote }} }
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: {{ include "chess.secretName" . }}, key: POSTGRES_PASSWORD }
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -h 127.0.0.1"]
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -h 127.0.0.1"]
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+            - { name: run, mountPath: /var/run/postgresql }
+          resources:
+            {{- toYaml $pg.resources | nindent 12 }}
+      volumes:
+        - name: run
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with $pg.persistence.storageClass }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ $pg.persistence.size }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "chess.component" $ctx }}
+  labels:
+    {{- include "chess.labels" $ctx | nindent 4 }}
+spec:
+  selector:
+    {{- include "chess.selectorLabels" $ctx | nindent 4 }}
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "chess.component" $ctx }}-headless
+  labels:
+    {{- include "chess.labels" $ctx | nindent 4 }}
+spec:
+  clusterIP: None
+  selector:
+    {{- include "chess.selectorLabels" $ctx | nindent 4 }}
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+{{- end }}

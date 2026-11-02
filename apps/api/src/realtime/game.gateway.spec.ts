@@ -12,15 +12,29 @@ import { GameGateway } from './game.gateway';
 /** Socket minimal : id, jeton au handshake, émissions enregistrées. */
 function fakeSocket(id: string, token?: string) {
   const toEmit = jest.fn();
-  return {
+  const socket: any = {
     id,
+    data: {} as Record<string, unknown>,
     handshake: { auth: token ? { token } : {} },
     emit: jest.fn(),
-    join: jest.fn().mockResolvedValue(undefined),
+    join: jest.fn(async (room: string) => {
+      rooms.get(room)?.add(socket) ?? rooms.set(room, new Set([socket]));
+    }),
+    leave: jest.fn(async (room: string) => {
+      rooms.get(room)?.delete(socket);
+    }),
     to: jest.fn(() => ({ emit: toEmit })),
     toEmit,
   };
+  return socket;
 }
+
+/**
+ * Rooms simulées. Sprint 19 : la présence est calculée via
+ * `server.in(room).fetchSockets()` (valable sur tous les réplicas grâce à
+ * l'adaptateur Redis) ; le faux serveur la reproduit à partir des `join`.
+ */
+const rooms = new Map<string, Set<any>>();
 
 const ONLINE_STATE = {
   id: 'g-1',
@@ -53,6 +67,12 @@ describe('GameGateway — sécurité', () => {
     return socket;
   }
 
+  /** Comme Socket.IO : le socket quitte ses rooms AVANT l'événement disconnect. */
+  async function disconnect(socket: any) {
+    for (const members of rooms.values()) members.delete(socket);
+    await gateway.handleDisconnect(socket);
+  }
+
   beforeEach(() => {
     jest.useFakeTimers();
     jest.clearAllMocks();
@@ -63,7 +83,13 @@ describe('GameGateway — sécurité', () => {
       jwt as unknown as JwtService,
       notifications as unknown as NotificationsService,
     );
-    gateway.server = { to: jest.fn(() => ({ emit: roomEmit })) } as any;
+    rooms.clear();
+    gateway.server = {
+      to: jest.fn(() => ({ emit: roomEmit })),
+      in: jest.fn((room: string) => ({
+        fetchSockets: jest.fn(async () => [...(rooms.get(room) ?? [])]),
+      })),
+    } as any;
   });
 
   afterEach(() => jest.useRealTimers());
@@ -124,7 +150,7 @@ describe('GameGateway — sécurité', () => {
 
   it('un spectateur qui se déconnecte ne fait perdre personne', async () => {
     const eve = await joined('s-eve', 'eve');
-    gateway.handleDisconnect(eve as any);
+    await disconnect(eve);
     await jest.advanceTimersByTimeAsync(31_000);
     expect(games.resign).not.toHaveBeenCalled();
   });
@@ -132,14 +158,14 @@ describe('GameGateway — sécurité', () => {
   it('un joueur encore connecté sur un autre onglet ne perd pas', async () => {
     const tab1 = await joined('s-alice-1', 'alice');
     await joined('s-alice-2', 'alice');
-    gateway.handleDisconnect(tab1 as any);
+    await disconnect(tab1);
     await jest.advanceTimersByTimeAsync(31_000);
     expect(games.resign).not.toHaveBeenCalled();
   });
 
   it('joueur parti 30 s → forfait par le serveur (ABANDONED) pour SA couleur', async () => {
     const bob = await joined('s-bob', 'bob');
-    gateway.handleDisconnect(bob as any);
+    await disconnect(bob);
     expect(bob.toEmit).toHaveBeenCalledWith('game:opponentDisconnected', { graceMs: 30_000 });
 
     await jest.advanceTimersByTimeAsync(30_000);
@@ -150,7 +176,7 @@ describe('GameGateway — sécurité', () => {
 
   it('joueur revenu avant 30 s → pas de forfait', async () => {
     const bob = await joined('s-bob', 'bob');
-    gateway.handleDisconnect(bob as any);
+    await disconnect(bob);
     await jest.advanceTimersByTimeAsync(10_000);
     await joined('s-bob-2', 'bob');
     await jest.advanceTimersByTimeAsync(25_000);
@@ -160,8 +186,8 @@ describe('GameGateway — sécurité', () => {
   it('les deux joueurs partent : deux minuteries distinctes (plus d\'écrasement)', async () => {
     const alice = await joined('s-alice', 'alice');
     const bob = await joined('s-bob', 'bob');
-    gateway.handleDisconnect(alice as any);
-    gateway.handleDisconnect(bob as any);
+    await disconnect(alice);
+    await disconnect(bob);
 
     await jest.advanceTimersByTimeAsync(30_000);
 

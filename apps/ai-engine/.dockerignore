@@ -1,0 +1,10 @@
+# Sprint 19 — Contexte Docker : sources uniquement.
+# Évite d'envoyer node_modules (centaines de Mo, binaires de l'hôte), le build
+# local et surtout le fichier .env (secrets) dans le contexte de build.
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+*.log

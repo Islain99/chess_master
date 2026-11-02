@@ -1,4 +1,5 @@
-import { Logger } from '@nestjs/common';
+import { Logger, OnModuleDestroy, Optional } from '@nestjs/common';
+import { MetricsService } from '../metrics/metrics.service';
 import { JwtService } from '@nestjs/jwt';
 import {
   ConnectedSocket,
@@ -40,7 +41,7 @@ interface ConnInfo {
  * (@socket.io/redis-adapter) dans main.ts.
  */
 @WebSocketGateway({ namespace: '/game', cors: { origin: '*' } })
-export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy {
   @WebSocketServer()
   server: Server;
 
@@ -51,6 +52,17 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   /** `${gameId}:${couleur}` → timer de forfait en cas de déconnexion (sprint 17 : par joueur) */
   private readonly disconnectTimers = new Map<string, NodeJS.Timeout>();
+
+  /**
+   * Sprint 20 : à l'arrêt du pod, les minuteries de forfait (30 s) se
+   * déclenchaient APRÈS la fermeture de Prisma et de Redis (erreurs
+   * « Connection is closed ») et retardaient la fin du processus. Un autre
+   * pod reprendra la surveillance quand le joueur se reconnectera.
+   */
+  onModuleDestroy() {
+    for (const timer of this.disconnectTimers.values()) clearTimeout(timer);
+    this.disconnectTimers.clear();
+  }
   private readonly moveLimiter = new WsRateLimiter(5_000, 20);
 
   /** Sprint 16 : gameId → joueurs (pour savoir qui prévenir après un coup). */
@@ -60,6 +72,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly gamesService: GamesService,
     private readonly jwtService: JwtService,
     private readonly notifications: NotificationsService,
+    @Optional() private readonly metrics?: MetricsService, // sprint 19
   ) {}
 
   // ──────────────────────────────────────────────
@@ -83,15 +96,20 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     };
   }
 
-  /** Vrai si l'utilisateur a un socket ouvert sur cette partie. */
-  private isWatching(gameId: string, userId: string): boolean {
-    for (const conn of this.connections.values()) {
-      if (conn.gameId === gameId && conn.userId === userId) return true;
-    }
-    return false;
+  /**
+   * Utilisateurs ayant un socket ouvert sur cette partie, TOUS PODS CONFONDUS.
+   * Sprint 19 : `fetchSockets()` interroge les autres réplicas via
+   * l'adaptateur Redis (avant : simple parcours de la mémoire du pod, faux dès
+   * qu'il y avait plusieurs réplicas → forfaits et notifications erronés).
+   * L'identité est portée par `socket.data.userId` (posée au handshake).
+   */
+  private async presentUsers(gameId: string): Promise<Set<string>> {
+    const sockets = await this.server.in(`game:${gameId}`).fetchSockets();
+    return new Set(
+      sockets.map((s) => s.data?.userId as string | undefined).filter((u): u is string => !!u),
+    );
   }
 
-  /** Lance les notifications sans bloquer ni faire échouer le traitement du coup. */
   private notifySafely(task: () => Promise<unknown>) {
     task().catch((err) => this.logger.warn(`Notification ignorée : ${err}`));
   }
@@ -109,9 +127,11 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private notifyEnded(game: GameForNotification) {
     this.players.delete(game.id); // partie terminée : plus besoin du cache
-    this.notifySafely(() =>
-      this.notifications.notifyGameEnded(game, (uid) => this.isWatching(game.id, uid)),
-    );
+    this.metrics?.gameFinished(game);
+    this.notifySafely(async () => {
+      const present = await this.presentUsers(game.id);
+      return this.notifications.notifyGameEnded(game, (uid) => present.has(uid));
+    });
   }
 
   // ──────────────────────────────────────────────
@@ -119,11 +139,13 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   // ──────────────────────────────────────────────
 
   handleConnection(client: Socket) {
+    this.metrics?.wsConnected('game');
     try {
       const token = client.handshake.auth?.token as string | undefined;
       if (token) {
         const payload = this.jwtService.verify<{ sub: string }>(token);
         this.connections.set(client.id, { userId: payload.sub });
+        client.data.userId = payload.sub; // sprint 19 : lisible depuis les autres pods
       } else {
         this.connections.set(client.id, {});
       }
@@ -134,7 +156,8 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.logger.debug(`Connecté : ${client.id}`);
   }
 
-  handleDisconnect(client: Socket) {
+  async handleDisconnect(client: Socket) {
+    this.metrics?.wsDisconnected('game');
     const conn = this.connections.get(client.id);
     this.moveLimiter.remove(client.id);
     this.connections.delete(client.id);
@@ -144,7 +167,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // spectateur qui partait faisait perdre les blancs), et seulement s'il
     // n'a plus aucun autre onglet / appareil connecté à la partie.
     if (!conn?.gameId || !conn.color || !conn.userId) return;
-    if (this.isWatching(conn.gameId, conn.userId)) return;
+    if ((await this.presentUsers(conn.gameId)).has(conn.userId)) return;
 
     const { gameId, color, userId } = conn;
     client.to(`game:${gameId}`).emit('game:opponentDisconnected', { graceMs: 30_000 });
@@ -153,7 +176,8 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     clearTimeout(this.disconnectTimers.get(key));
     const timer = setTimeout(async () => {
       this.disconnectTimers.delete(key);
-      if (this.isWatching(gameId, userId)) return; // revenu entre-temps
+      // Revenu entre-temps, éventuellement sur un autre pod
+      if ((await this.presentUsers(gameId)).has(userId)) return;
       try {
         const state = await this.gamesService.findById(gameId);
         if (state.status !== 'ONGOING' || !isOnlineGame(state.mode)) return;
@@ -261,13 +285,14 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         );
       } else {
         // Sprint 16 : « À vous de jouer » si l'adversaire n'est pas devant la partie.
-        this.notifySafely(async () =>
-          this.notifications.notifyTurn(
+        this.notifySafely(async () => {
+          const present = await this.presentUsers(data.gameId);
+          return this.notifications.notifyTurn(
             { ...(await this.gamePlayers(data.gameId)), fen: result.game.fen },
             result.move?.san,
-            (uid) => this.isWatching(data.gameId, uid),
-          ),
-        );
+            (uid) => present.has(uid),
+          );
+        });
       }
     } catch (err: any) {
       // Coup illégal, pas son tour, pas joueur… → uniquement à son auteur

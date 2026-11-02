@@ -1,4 +1,5 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import Redis from 'ioredis';
 import {
   GameMode,
@@ -11,7 +12,14 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const QUEUE_KEY      = (tc: string) => `mm:queue:${tc}`;   // sorted set (score = elo)
 const DATA_KEY       = (uid: string) => `mm:data:${uid}`;  // hash { socketId, elo, tc }
-const LOCK_KEY       = (a: string, b: string) => `mm:lock:${[a, b].sort().join(':')}`;
+// Sprint 19 : verrou PAR JOUEUR (et non par paire). Avec plusieurs réplicas,
+// le pod A pouvait apparier (A, B) pendant que le pod B appariait (B, C) :
+// deux verrous de paire différents → B jeté dans deux parties.
+const PLAYER_LOCK_KEY = (uid: string) => `mm:lock:player:${uid}`;
+const LOCK_TTL_SEC   = 10;
+/** Supprime le verrou seulement s'il nous appartient encore (jeton). */
+const UNLOCK_SCRIPT  =
+  "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
 const QUEUE_TTL_SEC  = 300; // 5 min max en file
 const ELO_RANGE      = 300; // ±300 Elo de départ
 const RANGE_EXPAND   = 100; // expansion toutes les 30 s (géré côté gateway)
@@ -39,6 +47,9 @@ export interface MatchResult {
   blackSocketId:   string;
   whiteElo:        number;
   blackElo:        number;
+  /** Sprint 20 : noms affichés, transmis dans lobby:matchFound. */
+  whiteName:       string | null;
+  blackName:       string | null;
   timeControl:     TimeControlCategory;
 }
 
@@ -104,6 +115,20 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
     this.logger.debug(`${userId} retiré de la file ${tc}`);
   }
 
+  /**
+   * Sprint 20 — Retire le joueur de la file SI c'est bien ce socket qui l'y a
+   * inscrit. Appelé à la déconnexion du lobby : avant, un joueur qui fermait
+   * l'appli restait en file jusqu'à 5 min et pouvait être apparié à une
+   * partie que personne ne jouerait (forfait de l'adversaire présent).
+   * Si le joueur s'est réinscrit depuis un autre onglet, on ne touche à rien.
+   */
+  async dequeueSocket(userId: string, socketId: string): Promise<boolean> {
+    const data = await this.getPlayerData(userId);
+    if (!data || data.socketId !== socketId) return false;
+    await this.dequeue(userId, data.timeControl as TimeControlCategory);
+    return true;
+  }
+
   // ──────────────────────────────────────────────
   // Tentative de correspondance
   // ──────────────────────────────────────────────
@@ -129,17 +154,48 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
     const opponentId = await this.closestElo(opponents, elo);
     if (!opponentId) return null;
 
-    // Verrou pour éviter les doubles appariements
-    const lockKey   = LOCK_KEY(userId, opponentId);
-    const acquired  = await this.redis.setnx(lockKey, '1');
-    if (!acquired) return null; // déjà en cours d'appariement
-    await this.redis.expire(lockKey, 10);
+    // Verrous des deux joueurs : un joueur ne peut être apparié que par un
+    // seul processus à la fois, quel que soit le pod (sprint 19).
+    const token  = randomUUID();
+    const locked = await this.lockPlayers([userId, opponentId], token);
+    if (locked.length < 2) {
+      await this.unlockPlayers(locked, token);
+      return null; // l'un des deux est déjà en cours d'appariement
+    }
 
     try {
+      // Un autre pod a pu les apparier entre la lecture de la file et le
+      // verrou : on revérifie qu'ils y sont toujours tous les deux.
+      const [score1, score2] = await Promise.all([
+        this.redis.zscore(QUEUE_KEY(timeControl), userId),
+        this.redis.zscore(QUEUE_KEY(timeControl), opponentId),
+      ]);
+      if (score1 === null || score2 === null) return null;
+
       return await this.createMatch(userId, opponentId, timeControl);
     } finally {
-      await this.redis.del(lockKey);
+      await this.unlockPlayers(locked, token);
     }
+  }
+
+  /**
+   * Prend les verrous dans l'ordre alphabétique (pas d'interblocage) et
+   * s'arrête au premier refus. Renvoie les identifiants effectivement verrouillés.
+   */
+  private async lockPlayers(userIds: string[], token: string): Promise<string[]> {
+    const locked: string[] = [];
+    for (const uid of [...userIds].sort()) {
+      const ok = await this.redis.set(PLAYER_LOCK_KEY(uid), token, 'EX', LOCK_TTL_SEC, 'NX');
+      if (ok !== 'OK') break;
+      locked.push(uid);
+    }
+    return locked;
+  }
+
+  private async unlockPlayers(userIds: string[], token: string): Promise<void> {
+    await Promise.all(
+      userIds.map((uid) => this.redis.eval(UNLOCK_SCRIPT, 1, PLAYER_LOCK_KEY(uid), token)),
+    );
   }
 
   // ──────────────────────────────────────────────
@@ -265,6 +321,10 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
         initialFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
         currentFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
       },
+      include: {
+        whitePlayer: { select: { displayName: true } },
+        blackPlayer: { select: { displayName: true } },
+      },
     });
 
     // Créer les entrées de file en BDD (statut MATCHED)
@@ -306,6 +366,8 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
       blackSocketId: blackData.socketId,
       whiteElo:      whiteData.elo,
       blackElo:      blackData.elo,
+      whiteName:     game.whitePlayer?.displayName ?? null,
+      blackName:     game.blackPlayer?.displayName ?? null,
       timeControl,
     };
   }

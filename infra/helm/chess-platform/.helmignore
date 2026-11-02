@@ -1,0 +1,9 @@
+# Fichiers exclus du paquet Helm
+.DS_Store
+.git/
+*.swp
+*.bak
+*.tmp
+*.orig
+.vscode/
+.idea/

@@ -1,0 +1,35 @@
+Chess Platform {{ .Chart.AppVersion }} déployé (release « {{ .Release.Name }} », namespace « {{ .Release.Namespace }} »).
+
+{{- if .Values.ingress.enabled }}
+
+Application : http{{ if .Values.ingress.tls.enabled }}s{{ end }}://{{ .Values.ingress.host }}
+API         : http{{ if .Values.ingress.tls.enabled }}s{{ end }}://{{ .Values.ingress.host }}/api/v1/health
+{{- else }}
+
+Ingress désactivé. Accès local :
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "chess.component" (dict "root" . "name" "client") }} 8080:80
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "chess.component" (dict "root" . "name" "api") }} 3000:80
+{{- end }}
+
+Suivi du déploiement :
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+  kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "chess.component" (dict "root" . "name" "api") }}
+
+{{- if not .Values.secrets.existingSecret }}
+
+Secrets (JWT, mots de passe Postgres / Redis) : Secret « {{ include "chess.secretName" . }} ».
+Générés au premier déploiement s'ils n'étaient pas fournis, puis conservés.
+Ce Secret n'est PAS supprimé par « helm uninstall » (il protège l'accès au volume Postgres).
+{{- end }}
+
+{{- if .Values.monitoring.enabled }}
+{{- if not (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1/ServiceMonitor") }}
+
+⚠ monitoring.enabled=true mais les CRD de Prometheus Operator sont absentes :
+  aucun ServiceMonitor / PrometheusRule créé. Installer kube-prometheus-stack
+  (voir docs/deployment.md), puis relancer « helm upgrade ».
+{{- else }}
+
+Supervision : ServiceMonitor + alertes créés ; tableau de bord Grafana « Chess Platform ».
+{{- end }}
+{{- end }}
