@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Query } from '@nestjs/common';
 import { TimeControlCategory } from '../common/prisma-enums';
 import { LeaderboardService } from './leaderboard.service';
 
@@ -16,10 +16,12 @@ export class LeaderboardController {
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
   ) {
-    return this.leaderboard.getLeaderboard(
-      tc ?? TimeControlCategory.RAPID,
-      page ? parseInt(page) : 1,
-      pageSize ? parseInt(pageSize) : 20,
-    );
+    // Sprint 21 : cadence inconnue → 400 (avant : erreur Prisma, 500)
+    if (tc !== undefined && !Object.values(TimeControlCategory).includes(tc)) {
+      throw new BadRequestException(
+        `Cadence inconnue. Valeurs possibles : ${Object.values(TimeControlCategory).join(', ')}.`,
+      );
+    }
+    return this.leaderboard.getLeaderboard(tc ?? TimeControlCategory.RAPID, page, pageSize);
   }
 }

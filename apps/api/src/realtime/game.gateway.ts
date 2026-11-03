@@ -238,12 +238,13 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect, On
         client.to(`game:${data.gameId}`).emit('game:opponentReconnected');
       }
 
-      // Diffuser l'état à toute la room (y compris le joueur qui vient de rejoindre)
-      // → permet à l'hôte de détecter que l'adversaire a rejoint
-      this.server.to(`game:${data.gameId}`).emit('game:state', {
-        ...state,
-        playerColor: conn.color ?? null,
-      });
+      // État complet au socket qui rejoint, AVEC sa couleur…
+      client.emit('game:state', { ...state, playerColor: conn.color ?? null });
+      // …et aux autres membres de la room (l'hôte voit l'adversaire arriver)
+      // SANS couleur. Sprint 21 : la couleur du nouvel arrivant était diffusée
+      // à toute la room ; quand les noirs rejoignaient, le client des blancs
+      // adoptait « black » et ne pouvait plus jouer.
+      client.to(`game:${data.gameId}`).emit('game:state', state);
     } catch (err) {
       client.emit('game:error', { message: 'Partie introuvable.' });
       this.logger.warn(`game:join error : ${err}`);

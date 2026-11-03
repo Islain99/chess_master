@@ -1,0 +1,6 @@
+# Scripts exécutés sur Linux (VPS, conteneurs) : toujours en fins de ligne LF,
+# même s'ils sont modifiés depuis Windows.
+*.sh       text eol=lf
+Caddyfile  text eol=lf
+Dockerfile text eol=lf
+*.conf     text eol=lf

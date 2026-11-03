@@ -56,11 +56,59 @@ describe('Parties REST (e2e)', () => {
       expect(pgn.text).toContain('1. e4');
     });
 
+    it('analyse refusée tant que la partie est en cours (400)', async () => {
+      const res = await target.api().post(`/api/v1/games/${gameId}/analysis`).set(bearer(alice)).expect(400);
+      expect(res.body.message).toContain('terminée');
+    });
+
     it('abandon → partie terminée, plus aucun coup accepté', async () => {
       const res = await target.api().post(`/api/v1/games/${gameId}/resign`).set(bearer(alice))
         .send({ color: 'white' }).expect(200);
       expect(res.body).toMatchObject({ status: 'FINISHED', result: 'BLACK_WIN', resultReason: 'RESIGNATION' });
       await move(gameId, 'd2d4', alice).expect(400);
+    });
+  });
+
+  describe('import FEN / PGN', () => {
+    it('FEN : partie locale depuis la position donnée', async () => {
+      const fen = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2';
+      const res = await target.api().post('/api/v1/games/import').send({ fen }).expect(201);
+      expect(res.body).toMatchObject({ mode: 'LOCAL', status: 'ONGOING', fen, initialFen: fen });
+    });
+
+    it('PGN terminé par un mat : coups rejoués, partie close', async () => {
+      const res = await target.api().post('/api/v1/games/import')
+        .send({ pgn: '1. f3 e5 2. g4 Qh4# 0-1' }).expect(201);
+      expect(res.body).toMatchObject({ status: 'FINISHED', result: 'BLACK_WIN' });
+      expect(res.body.moves.map((m: any) => m.san)).toEqual(['f3', 'e5', 'g4', 'Qh4#']);
+    });
+
+    it('ni PGN ni FEN → 400 (sprint 21)', async () => {
+      await target.api().post('/api/v1/games/import').send({}).expect(400);
+    });
+  });
+
+  describe('analyse et classement', () => {
+    it('analyse d\'une partie terminée : file d\'attente, une seule tâche par partie', async () => {
+      const user = await registerUser(target, 'analyse');
+      const created = await target.api().post('/api/v1/games').set(bearer(user))
+        .send({ mode: 'LOCAL', timeControl: 'RAPID' }).expect(201);
+      const id = created.body.id;
+      for (const uci of ['f2f3', 'e7e5', 'g2g4', 'd8h4']) await move(id, uci).expect(201);
+
+      const first = await target.api().post(`/api/v1/games/${id}/analysis`).set(bearer(user)).expect(202);
+      const second = await target.api().post(`/api/v1/games/${id}/analysis`).set(bearer(user)).expect(202);
+      expect(second.body.jobId).toBe(first.body.jobId);
+
+      // Aucun moteur IA dans les tests : la tâche reste en attente
+      const status = await target.api().get(`/api/v1/games/${id}/analysis`).set(bearer(user)).expect(200);
+      expect(status.body.status).toBe('processing');
+    });
+
+    it('classement public : pagination bornée, cadence inconnue refusée', async () => {
+      const res = await target.api().get('/api/v1/leaderboard?timeControl=BLITZ&page=0&pageSize=100000').expect(200);
+      expect(res.body).toMatchObject({ page: 1, pageSize: 50, timeControl: 'BLITZ' });
+      await target.api().get('/api/v1/leaderboard?timeControl=ULTRA').expect(400);
     });
   });
 

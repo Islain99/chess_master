@@ -136,7 +136,18 @@ describe('GameGateway — sécurité', () => {
       error: 'NOT_A_PLAYER',
       message: 'Vous ne participez pas à cette partie.',
     });
-    expect(eve.toEmit).not.toHaveBeenCalled();
+    expect(eve.toEmit).not.toHaveBeenCalledWith('game:drawOffered', expect.anything());
+  });
+
+  it('sprint 21 : game:join — sa couleur au seul arrivant, état sans couleur aux autres', async () => {
+    const bob = await joined('s-bob', 'bob');
+
+    expect(bob.emit).toHaveBeenCalledWith('game:state', expect.objectContaining({ id: 'g-1', playerColor: 'black' }));
+    const toOthers = bob.toEmit.mock.calls.find(([event]) => event === 'game:state');
+    expect(toOthers).toBeDefined();
+    expect(toOthers![1]).not.toHaveProperty('playerColor');
+    // plus de diffusion à toute la room (le client des blancs adoptait « black »)
+    expect(roomEmit).not.toHaveBeenCalledWith('game:state', expect.anything());
   });
 
   it('game:drawOffer valide → relayée à l\'adversaire avec la couleur', async () => {

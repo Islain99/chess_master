@@ -18,6 +18,19 @@ function kFactor(gamesPlayed: number): number {
   return 10;
 }
 
+/**
+ * Sprint 21 — Série de victoires après une partie : une victoire prolonge la
+ * série, une nulle ou une défaite la remet à 0 ; la meilleure série est le
+ * maximum atteint.
+ */
+export function nextStreak(
+  previous: { currentStreak: number; bestWinStreak: number } | null,
+  actual: number,
+): { currentStreak: number; bestWinStreak: number } {
+  const currentStreak = actual === 1 ? (previous?.currentStreak ?? 0) + 1 : 0;
+  return { currentStreak, bestWinStreak: Math.max(previous?.bestWinStreak ?? 0, currentStreak) };
+}
+
 /** Score attendu selon la formule Elo standard. */
 function expectedScore(ratingA: number, ratingB: number): number {
   return 1 / (1 + 10 ** ((ratingB - ratingA) / 400));
@@ -93,13 +106,16 @@ export class RatingsService {
     const tc = game.timeControl;
 
     // Elos courants (ou 1200 par défaut)
-    const [whiteRating, blackRating] = await Promise.all([
+    const [whiteRating, blackRating, whiteStats, blackStats] = await Promise.all([
       this.prisma.rating.findUnique({
         where: { userId_timeControl: { userId: game.whitePlayerId, timeControl: tc } },
       }),
       this.prisma.rating.findUnique({
         where: { userId_timeControl: { userId: game.blackPlayerId, timeControl: tc } },
       }),
+      // Sprint 21 : séries de victoires (lues pour être prolongées ou remises à 0)
+      this.prisma.userStatistics.findUnique({ where: { userId: game.whitePlayerId } }),
+      this.prisma.userStatistics.findUnique({ where: { userId: game.blackPlayerId } }),
     ]);
 
     const whiteElo    = whiteRating?.elo ?? 1200;
@@ -177,14 +193,15 @@ export class RatingsService {
           totalWins:    whiteActual === 1 ? 1 : 0,
           totalLosses:  whiteActual === 0 ? 1 : 0,
           totalDraws:   whiteActual === 0.5 ? 1 : 0,
-          currentStreak: whiteActual === 1 ? 1 : 0,
-          bestWinStreak: whiteActual === 1 ? 1 : 0,
+          ...nextStreak(null, whiteActual),
         },
         update: {
           totalGames: { increment: 1 },
           totalWins:    whiteActual === 1   ? { increment: 1 } : undefined,
           totalLosses:  whiteActual === 0   ? { increment: 1 } : undefined,
           totalDraws:   whiteActual === 0.5 ? { increment: 1 } : undefined,
+          // Sprint 21 : séries mises à jour (avant : figées après la 1re partie)
+          ...nextStreak(whiteStats, whiteActual),
         },
       }),
       this.prisma.userStatistics.upsert({
@@ -195,14 +212,15 @@ export class RatingsService {
           totalWins:    blackActual === 1 ? 1 : 0,
           totalLosses:  blackActual === 0 ? 1 : 0,
           totalDraws:   blackActual === 0.5 ? 1 : 0,
-          currentStreak: blackActual === 1 ? 1 : 0,
-          bestWinStreak: blackActual === 1 ? 1 : 0,
+          ...nextStreak(null, blackActual),
         },
         update: {
           totalGames: { increment: 1 },
           totalWins:    blackActual === 1   ? { increment: 1 } : undefined,
           totalLosses:  blackActual === 0   ? { increment: 1 } : undefined,
           totalDraws:   blackActual === 0.5 ? { increment: 1 } : undefined,
+          // Sprint 21 : séries mises à jour (avant : figées après la 1re partie)
+          ...nextStreak(blackStats, blackActual),
         },
       }),
     ]);

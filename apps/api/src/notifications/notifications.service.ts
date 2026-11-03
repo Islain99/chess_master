@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { NotificationType } from '../common/prisma-enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from './push/push.service';
+import { parsePage } from '../common/pagination';
 
 /** Vue minimale d'une partie, commune à GamesService.toResponse et au modèle Prisma. */
 export interface GameForNotification {
@@ -108,8 +109,9 @@ export class NotificationsService {
   }
 
   /** Liste les notifications d'un utilisateur (non lues en premier). */
-  async list(userId: string, page = 1, pageSize = 20) {
-    const skip = (page - 1) * pageSize;
+  async list(userId: string, pageInput?: string | number, pageSizeInput?: string | number) {
+    // Sprint 21 : pagination bornée (voir common/pagination.ts)
+    const { page, pageSize, skip } = parsePage(pageInput, pageSizeInput);
     const [items, total] = await this.prisma.$transaction([
       this.prisma.notification.findMany({
         where:   { userId },

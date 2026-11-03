@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -45,7 +46,8 @@ export class GamesController {
   async importGame(@Body() dto: ImportGameDto) {
     if (dto.fen) return this.gamesService.importFromFen(dto.fen);
     if (dto.pgn) return this.gamesService.importFromPgn(dto.pgn);
-    return { error: 'Fournir pgn ou fen.' };
+    // Sprint 21 : 400 (avant : 201 avec un corps { error } trompeur)
+    throw new BadRequestException('Fournir « pgn » ou « fen ».');
   }
 
   /** GET /games/:id — état courant + coups légaux */

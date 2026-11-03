@@ -1,0 +1,32 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Caddy — reverse proxy + certificat HTTPS Let's Encrypt automatique
+# DOMAIN et ACME_EMAIL viennent de infra/prod/.env (via docker-compose.yml).
+# ─────────────────────────────────────────────────────────────────────────────
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	# API REST + WebSocket Socket.IO (Caddy gère l'upgrade WebSocket tout seul)
+	@backend path /api/* /socket.io/*
+	handle @backend {
+		reverse_proxy api:3000
+	}
+
+	# Tout le reste : application Web Flutter
+	handle {
+		reverse_proxy client:8080
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

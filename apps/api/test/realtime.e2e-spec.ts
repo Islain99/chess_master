@@ -33,9 +33,12 @@ describe('Temps réel (e2e)', () => {
     expect([white.color, black.color]).toEqual(['white', 'black']);
 
     const w = await joinGame(target, gameId, white.user);
+    const whiteSeesArrival = waitFor(w.socket, 'game:state');
     const b = await joinGame(target, gameId, black.user);
     expect(w.state).toMatchObject({ id: gameId, mode: 'MATCHMAKING', status: 'ONGOING', playerColor: 'white' });
     expect(b.state.playerColor).toBe('black');
+    // Sprint 21 : l'arrivée des noirs ne transmet pas « black » au client des blancs
+    expect(await whiteSeesArrival).not.toHaveProperty('playerColor');
 
     const sockets = [w.socket, b.socket];
     const ended = sockets.map((s) => waitFor(s, 'game:ended'));
@@ -60,7 +63,7 @@ describe('Temps réel (e2e)', () => {
 
     const stats = await target.api().get(`/api/v1/users/${black.user.id}/statistics`)
       .set(bearer(black.user)).expect(200);
-    expect(stats.body).toMatchObject({ totalGames: 1, totalWins: 1 });
+    expect(stats.body).toMatchObject({ totalGames: 1, totalWins: 1, currentStreak: 1, bestWinStreak: 1 });
   });
 
   it('coups refusés en direct : mauvais tour et spectateur ne touchent pas la partie', async () => {

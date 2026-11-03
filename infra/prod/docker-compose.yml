@@ -1,0 +1,166 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Production sur un seul serveur (VPS DigitalOcean)
+#
+#   cd infra/prod && cp .env.example .env   # puis remplir .env
+#   docker compose up -d --build
+#
+# Un seul domaine sert tout, derrière Caddy (HTTPS Let's Encrypt automatique) :
+#   https://DOMAIN/             → client Web Flutter (Nginx)
+#   https://DOMAIN/api/v1/...   → API NestJS
+#   https://DOMAIN/socket.io/   → WebSocket (namespaces /game et /lobby)
+#
+# Seuls les ports 80 et 443 de Caddy sont publiés. Postgres, Redis, l'API et
+# le moteur IA ne sont joignables que dans le réseau Docker. /metrics n'est
+# pas routé vers l'extérieur.
+# ─────────────────────────────────────────────────────────────────────────────
+name: chess
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN manquant dans .env}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL manquant dans .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - client
+    logging: *logging
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: chess
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant dans .env}
+      POSTGRES_DB: chess
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chess"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Persistance AOF : files BullMQ (analyses) et matchmaking survivent à un redémarrage.
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+
+  ai-engine:
+    image: chess-ai-engine:prod
+    build:
+      context: ../../apps/ai-engine
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      STOCKFISH_PATH: /usr/bin/stockfish
+      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgresql://chess:${POSTGRES_PASSWORD}@postgres:5432/chess
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # Stockfish est gourmand : on l'empêche d'affamer l'API sur un petit VPS.
+    cpus: ${AI_ENGINE_CPUS:-1.0}
+    logging: *logging
+
+  migrate:
+    image: chess-api:prod
+    build:
+      context: ../../apps/api
+    command: ["npm", "run", "db:push"]
+    environment:
+      DATABASE_URL: postgresql://chess:${POSTGRES_PASSWORD}@postgres:5432/chess
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    logging: *logging
+
+  api:
+    image: chess-api:prod
+    build:
+      context: ../../apps/api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://chess:${POSTGRES_PASSWORD}@postgres:5432/chess
+      REDIS_URL: redis://redis:6379
+      AI_ENGINE_URL: http://ai-engine:3001
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET manquant dans .env}
+      # Client et API sur le même domaine : seule cette origine est acceptée.
+      CORS_ORIGIN: https://${DOMAIN}
+      # Caddy est le seul proxy devant l'API → IP réelle pour le Throttler.
+      TRUST_PROXY: 1
+      PUBLIC_WEB_URL: https://${DOMAIN}
+      GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:-}
+      APPLE_CLIENT_IDS: ${APPLE_CLIENT_IDS:-}
+      APPLE_ANDROID_PACKAGE: ${APPLE_ANDROID_PACKAGE:-com.islain99.chess_client}
+      FACEBOOK_APP_ID: ${FACEBOOK_APP_ID:-}
+      FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET:-}
+      FCM_SERVICE_ACCOUNT: ${FCM_SERVICE_ACCOUNT:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ai-engine:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/v1/health/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+
+  client:
+    image: chess-client:prod
+    build:
+      context: ../../apps/client
+      args:
+        # Même origine que la page : pas de CORS, pas de contenu mixte.
+        API_URL: https://${DOMAIN}/api/v1
+        WS_URL: https://${DOMAIN}
+    restart: unless-stopped
+    logging: *logging
+
+volumes:
+  postgres_data:
+  redis_data:
+  caddy_data:
+  caddy_config:

@@ -58,11 +58,7 @@ export class NotificationsController {
     @Query('pageSize') pageSize?: string,
   ) {
     const user = req.user as RequestUser;
-    return this.notifications.list(
-      user.userId,
-      page ? parseInt(page) : 1,
-      pageSize ? parseInt(pageSize) : 20,
-    );
+    return this.notifications.list(user.userId, page, pageSize);
   }
 
   /** GET /notifications/unread-count */

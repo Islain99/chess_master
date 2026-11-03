@@ -2,6 +2,10 @@
 
 Application d'échecs complète : IA niveaux 1-5, multijoueur temps réel, matchmaking Elo, analyse Stockfish.
 
+## Documentation
+
+**[Guide utilisateur](docs/user-guide.md)** · [Architecture (UML)](docs/architecture.md) · [Base de données](docs/database.md) · [API REST](docs/api-rest-spec.md) · [WebSocket](docs/websocket-events.md) · [Déploiement](docs/deployment.md) · [VPS](docs/deploiement-vps.md) · [Tests](docs/testing.md) — index : [docs/README.md](docs/README.md)
+
 ## Stack technique
 
 | Couche | Technologie |
@@ -29,11 +33,16 @@ chess-platform/
 ├── infra/
 │   ├── docker-compose.yml
 │   └── helm/         # Helm chart chess-platform (seule source Kubernetes)
-├── docs/
+├── docs/             # index : docs/README.md
+│   ├── user-guide.md       # guide utilisateur (joueurs)
+│   ├── architecture.md     # UML : composants, classes, séquences, états
+│   ├── database.md         # modèle entité-association
 │   ├── api-rest-spec.md
-│   ├── deployment.md # Compose, Helm, supervision, CI/CD
-│   ├── testing.md    # unitaires, end-to-end, Flutter
-│   └── websocket-events.md
+│   ├── websocket-events.md
+│   ├── deployment.md       # Compose, Helm, supervision, CI/CD
+│   ├── testing.md          # unitaires, end-to-end, Flutter
+│   ├── oauth-setup.md
+│   └── push-setup.md
 └── .github/workflows/ci.yml
 ```
 
@@ -120,6 +129,7 @@ AI_ENGINE_URL=http://localhost:3001
 | 18 | Lecteur de partie + graphique d'évaluation · reprise de partie · « Mes parties » · thèmes de pièces appliqués · profil et avatars · classification des coups (probabilité de gain) |
 | 19 | Chart Helm complet (IA, client, Postgres, Redis, secrets, migration, NetworkPolicies) · API multi-réplicas (Socket.IO Redis, nulles et appariement partagés) · métriques Prometheus + alertes + tableau de bord Grafana · CI de déploiement réparée — voir [docs/deployment.md](docs/deployment.md) |
 | 20 | Tests : 43 tests end-to-end (HTTP + Socket.IO, partie classée jusqu'au mat, deux réplicas), matchmaking et lobby, widgets Flutter · corrections : détection de vol des refresh tokens, CORS « * », file d'attente à la déconnexion, couleurs et réglages du plateau — voir [docs/testing.md](docs/testing.md) |
+| 21 | Documentation : guide utilisateur, architecture UML (composants, classes, séquences, états, déploiement), modèle entité-association, API REST et WebSocket réécrites d'après le code · corrections : couleur du joueur perdue à l'arrivée de l'adversaire, séries de victoires, pagination bornée, erreurs 500 → 400 — voir [docs/](docs/README.md) |
 
 ## Tests
 
@@ -131,8 +141,8 @@ flutter analyze       # 0 problème
 flutter test          # 105 tests unitaires et de widget
 
 cd apps/api
-npm run test          # 283 tests unitaires
-npm run test:e2e      # 43 tests end-to-end (Postgres + Redis réels, voir le guide)
+npm run test          # 292 tests unitaires
+npm run test:e2e      # 49 tests end-to-end (Postgres + Redis réels, voir le guide)
 npm run lint          # ESLint TypeScript
 npm run build         # compilation TypeScript
 ```
@@ -140,6 +150,8 @@ npm run build         # compilation TypeScript
 ## Déploiement production
 
 Guide complet : **[docs/deployment.md](docs/deployment.md)**.
+
+**VPS (DigitalOcean) avec HTTPS** : [docs/deploiement-vps.md](docs/deploiement-vps.md), configuration dans `infra/prod/` (Compose + Caddy).
 
 ```bash
 # Docker Compose (un serveur)

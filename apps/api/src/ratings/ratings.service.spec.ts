@@ -1,12 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { RatingsService } from './ratings.service';
+import { nextStreak, RatingsService } from './ratings.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { GameMode, GameResult, TimeControlCategory } from '../common/prisma-enums';
 
 const mockPrisma = {
   game:    { findUnique: jest.fn() },
   rating:  { findUnique: jest.fn(), upsert: jest.fn() },
-  userStatistics: { upsert: jest.fn() },
+  userStatistics: { upsert: jest.fn(), findUnique: jest.fn().mockResolvedValue(null) },
   $transaction: jest.fn().mockImplementation((ops) => Promise.all(ops)),
 };
 
@@ -109,6 +109,44 @@ describe('RatingsService', () => {
 
       await service.updateAfterGame('g1');
       expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('sprint 21 : la série de victoires du gagnant est prolongée, celle du perdant remise à 0', async () => {
+      mockPrisma.game.findUnique.mockResolvedValue({
+        id: 'g2', mode: GameMode.MATCHMAKING, result: GameResult.WHITE_WIN,
+        whitePlayerId: 'u1', blackPlayerId: 'u2', timeControl: TimeControlCategory.BLITZ,
+      });
+      mockPrisma.rating.findUnique.mockResolvedValue({ elo: 1200, peakElo: 1200, gamesPlayed: 10 });
+      mockPrisma.userStatistics.findUnique.mockImplementation(async ({ where }) =>
+        where.userId === 'u1'
+          ? { currentStreak: 2, bestWinStreak: 2 }
+          : { currentStreak: 4, bestWinStreak: 6 },
+      );
+      mockPrisma.userStatistics.upsert.mockResolvedValue({});
+
+      await service.updateAfterGame('g2');
+
+      const byUser = Object.fromEntries(
+        mockPrisma.userStatistics.upsert.mock.calls.map(([args]) => [args.where.userId, args.update]),
+      );
+      expect(byUser.u1).toMatchObject({ currentStreak: 3, bestWinStreak: 3 });
+      expect(byUser.u2).toMatchObject({ currentStreak: 0, bestWinStreak: 6 });
+    });
+  });
+
+  describe('nextStreak()', () => {
+    it('victoire : +1, meilleure série mise à jour', () => {
+      expect(nextStreak({ currentStreak: 5, bestWinStreak: 5 }, 1)).toEqual({ currentStreak: 6, bestWinStreak: 6 });
+    });
+
+    it('nulle ou défaite : série remise à 0, record conservé', () => {
+      expect(nextStreak({ currentStreak: 3, bestWinStreak: 7 }, 0.5)).toEqual({ currentStreak: 0, bestWinStreak: 7 });
+      expect(nextStreak({ currentStreak: 3, bestWinStreak: 7 }, 0)).toEqual({ currentStreak: 0, bestWinStreak: 7 });
+    });
+
+    it('première partie', () => {
+      expect(nextStreak(null, 1)).toEqual({ currentStreak: 1, bestWinStreak: 1 });
+      expect(nextStreak(null, 0)).toEqual({ currentStreak: 0, bestWinStreak: 0 });
     });
   });
 });

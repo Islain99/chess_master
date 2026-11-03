@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { TimeControlCategory } from '../common/prisma-enums';
 import { PrismaService } from '../prisma/prisma.service';
+import { parsePage } from '../common/pagination';
 
 @Injectable()
 export class LeaderboardService {
@@ -8,10 +9,11 @@ export class LeaderboardService {
 
   async getLeaderboard(
     timeControl: TimeControlCategory = TimeControlCategory.RAPID,
-    page = 1,
-    pageSize = 20,
+    pageInput?: string | number,
+    pageSizeInput?: string | number,
   ) {
-    const skip = (page - 1) * pageSize;
+    // Sprint 21 : pagination bornée (voir common/pagination.ts)
+    const { page, pageSize, skip } = parsePage(pageInput, pageSizeInput);
 
     const [ratings, total] = await this.prisma.$transaction([
       this.prisma.rating.findMany({

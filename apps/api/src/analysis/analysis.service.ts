@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   Logger,
   NotFoundException,
@@ -43,7 +44,8 @@ export class AnalysisService {
 
     if (!game) throw new NotFoundException(`Partie ${gameId} introuvable.`);
     if (game.status === 'ONGOING') {
-      throw new Error('La partie doit être terminée pour être analysée.');
+      // Sprint 21 : 400 explicite (avant : Error brute → 500)
+      throw new BadRequestException('La partie doit être terminée pour être analysée.');
     }
 
     // Préparer le payload avec les FEN avant/après chaque coup
@@ -62,10 +64,21 @@ export class AnalysisService {
       });
     }
 
+    // Un job terminé ou en échec garde son identifiant dans Redis : on le
+    // retire pour permettre une nouvelle tentative.
+    const jobId = `analysis-${gameId}`;
+    const previous = await this.queue.getJob(jobId);
+    if (previous && ((await previous.isFailed()) || (await previous.isCompleted()))) {
+      await previous.remove();
+    }
+
     const job = await this.queue.add(
       'analyze',
       { gameId, engineDepth: requestedDepth, moves: moveData } satisfies AnalysisJobData,
       {
+        // Sprint 21 : un seul job par partie — demander deux fois l'analyse
+        // (double appui, deux appareils) ne lance plus deux calculs Stockfish.
+        jobId,
         attempts: 2,
         backoff: { type: 'exponential', delay: 5_000 },
         removeOnComplete: 100,
