@@ -26,9 +26,10 @@ Sur DigitalOcean : **Create → Droplets**
 
 - **Image** : Ubuntu 24.04 LTS
 - **Région** : Toronto (TOR1), la plus proche de Montréal
-- **Taille** : Basic, **2 vCPU / 4 Go** recommandé. 1 vCPU / 2 Go fonctionne
-  (le script ajoute 2 Go de swap pour la compilation Flutter), mais Stockfish et
-  la compilation seront lents.
+- **Taille** : Basic → Regular → **1 vCPU / 2 Go / 50 Go (12 $/mois)**. C'est
+  la configuration visée par `infra/prod/`. Le script ajoute 2 Go de swap pour
+  la compilation Flutter, et Stockfish est limité à 75 % du processeur pour que
+  l'API reste fluide pendant les analyses.
 - **Authentification** : **SSH Key** (ajoute ta clé publique ; sous Windows :
   `ssh-keygen -t ed25519` puis le contenu de `~/.ssh/id_ed25519.pub`)
 - Option conseillée : cocher **Backups** (sauvegardes du Droplet entier)
@@ -73,7 +74,8 @@ Si le dépôt est privé, `git clone` demande un identifiant : utilise ton nom
 GitHub et un *fine-grained personal access token* (lecture seule sur
 `chess_master`) comme mot de passe.
 
-La première construction prend 10 à 20 minutes (l'image Flutter est lourde).
+La première construction prend 20 à 30 minutes sur 1 vCPU (l'image Flutter est
+lourde). Les mises à jour suivantes sont plus rapides grâce au cache Docker.
 À la fin, le script affiche `En ligne : https://DOMAIN`.
 
 ## 6. Sauvegardes quotidiennes de la base
@@ -115,7 +117,9 @@ docker compose exec postgres psql -U chess chess
 - **`Configuration de production invalide`** dans les logs de l'API :
   `JWT_ACCESS_SECRET` est vide ou fait moins de 32 caractères.
 - **Compilation du client tuée (`Killed`, code 137)** : mémoire insuffisante.
-  Vérifie le swap (`swapon --show`) ou prends un Droplet plus grand.
+  Vérifie le swap (`swapon --show`). En dernier recours, passe temporairement
+  le Droplet à 4 Go (*Resize*, CPU et RAM seulement, réversible), compile, puis
+  reviens à 2 Go.
 
 ## Applications mobiles et bureau
 

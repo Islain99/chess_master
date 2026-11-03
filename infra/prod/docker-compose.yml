@@ -93,7 +93,7 @@ services:
       timeout: 5s
       retries: 10
     # Stockfish est gourmand : on l'empêche d'affamer l'API sur un petit VPS.
-    cpus: ${AI_ENGINE_CPUS:-1.0}
+    cpus: ${AI_ENGINE_CPUS:-0.75}
     logging: *logging
 
   migrate:

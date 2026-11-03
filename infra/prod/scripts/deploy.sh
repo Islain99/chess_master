@@ -30,7 +30,7 @@ for var in DOMAIN ACME_EMAIL POSTGRES_PASSWORD JWT_ACCESS_SECRET; do
   fi
 done
 
-echo "==> Construction des images (la première fois : 10 à 20 min)"
+echo "==> Construction des images (la première fois : 20 à 30 min sur 1 vCPU)"
 docker compose build
 
 echo "==> Démarrage"
