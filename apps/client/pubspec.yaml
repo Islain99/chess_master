@@ -36,6 +36,9 @@ dependencies:
   google_fonts: ^6.2.1
   gap: ^3.0.1
 
+  # Effets sonores (réglage « Effets sonores »)
+  audioplayers: ^6.6.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -43,3 +46,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/sounds/

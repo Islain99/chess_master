@@ -3,16 +3,18 @@
 //
 //   • premier plan : bannière (SnackBar) + rafraîchissement du badge ;
 //   • notification touchée (appli en arrière-plan ou fermée) : ouverture de
-//     l'écran Notifications.
+//     la partie concernée (polissage), sinon de l'écran Notifications.
 // ─────────────────────────────────────────────────────────────────────────────
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/audio/sound_service.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/notifications_provider.dart';
 import '../screens/notifications_screen.dart';
+import '../services/open_game.dart';
 import '../services/push_service.dart';
 
 class PushListener extends ConsumerStatefulWidget {
@@ -54,6 +56,7 @@ class _PushListenerState extends ConsumerState<PushListener> {
 
   void _onForeground(PushEvent event) {
     ref.read(notificationsProvider.notifier).load();
+    ref.read(soundServiceProvider).play(GameSound.check);
     widget.messengerKey.currentState
       ?..hideCurrentSnackBar()
       ..showSnackBar(
@@ -62,13 +65,26 @@ class _PushListenerState extends ConsumerState<PushListener> {
           content: Text(
             [event.title, event.body].whereType<String>().join(' — '),
           ),
-          action: SnackBarAction(label: 'Voir', onPressed: _openNotifications),
+          action: SnackBarAction(label: 'Voir', onPressed: () => _openEvent(event)),
         ),
       );
   }
 
   void _onOpened(PushEvent event) {
     ref.read(notificationsProvider.notifier).load();
+    _openEvent(event);
+  }
+
+  /// Partie liée à la notification si possible, sinon la liste.
+  Future<void> _openEvent(PushEvent event) async {
+    final nav = widget.navigatorKey.currentState;
+    final gameId = event.gameId;
+    if (nav != null && gameId != null) {
+      if (event.notificationId != null) {
+        ref.read(notificationsProvider.notifier).markRead(event.notificationId!);
+      }
+      if (await openGame(nav, ref, gameId)) return;
+    }
     _openNotifications();
   }
 

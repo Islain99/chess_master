@@ -165,7 +165,7 @@ class SettingsScreen extends ConsumerWidget {
           ),
           _SwitchTile(
             icon: Icons.flip,
-            label: 'Retourner automatiquement (IA)',
+            label: 'Retourner le plateau à chaque coup (partie locale)',
             value: settings.autoFlipBoard,
             onToggle: () => notifier.toggle('auto_flip'),
           ),

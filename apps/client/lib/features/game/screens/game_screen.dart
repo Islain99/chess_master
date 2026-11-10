@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../replay/screens/game_replay_screen.dart';
 import 'package:gap/gap.dart';
+import '../../../core/settings/settings_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../board/widgets/chess_board.dart';
 import '../../board/widgets/chess_piece.dart';
@@ -94,7 +95,12 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     }
 
     final notifier = ref.read(gameProvider.notifier);
-    final flipped = state.isFlipped;
+    // Polissage : le réglage « Retourner automatiquement » était enregistré
+    // mais jamais lu. En partie locale (deux joueurs, un appareil), le plateau
+    // se tourne vers le camp au trait ; le bouton « Retourner » inverse
+    // toujours ce sens. Contre l'IA, le joueur garde son camp.
+    final autoFlip = ref.watch(settingsProvider.select((s) => s.autoFlipBoard)) && !state.isAiMode;
+    final flipped = autoFlip ? (state.activeColor == 'b') != state.isFlipped : state.isFlipped;
     final inCheckSquare = _findKingInCheck(state);
 
     return SafeArea(

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import '../../../core/theme/app_theme.dart';
 import '../providers/notifications_provider.dart';
+import '../services/open_game.dart';
 
 class NotificationsScreen extends ConsumerWidget {
   const NotificationsScreen({super.key});
@@ -44,8 +45,17 @@ class NotificationsScreen extends ConsumerWidget {
                     final n = state.items[i];
                     return _NotificationTile(
                       item:     n,
-                      onTap: () {
+                      onTap: () async {
                         if (!n.isRead) notifier.markRead(n.id);
+                        // Polissage : ouvrir la partie concernée.
+                        final gameId = n.payload['gameId'] as String?;
+                        if (gameId == null) return;
+                        final opened = await openGame(Navigator.of(ctx), ref, gameId);
+                        if (!opened && ctx.mounted) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                            content: Text('Partie introuvable ou serveur injoignable.'),
+                          ));
+                        }
                       },
                     );
                   },

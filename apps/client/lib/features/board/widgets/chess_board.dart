@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/audio/sound_service.dart';
 import '../../../core/settings/board_theme.dart';
 import '../../../core/settings/settings_provider.dart';
 import '../../../core/theme/app_theme.dart';
@@ -18,7 +19,7 @@ import 'chess_square.dart';
 /// et « Afficher les coups légaux » étaient enregistrés mais jamais appliqués
 /// (le plateau restait Classique, coordonnées et points toujours visibles).
 /// Ils sont lus ici, sur tous les plateaux (partie, en ligne, lecteur).
-class ChessBoardWidget extends ConsumerWidget {
+class ChessBoardWidget extends ConsumerStatefulWidget {
   const ChessBoardWidget({
     super.key,
     required this.position,
@@ -44,32 +45,135 @@ class ChessBoardWidget extends ConsumerWidget {
   /// Thème imposé (aperçu) ; sinon celui des réglages.
   final BoardTheme? boardTheme;
 
+  /// Durée du glissement d'une pièce (réglage « Animer les coups »).
+  static const animationDuration = Duration(milliseconds: 180);
+
+  /// Case claire ? a1 foncée, h1 claire, a8 claire (colonne + rangée paire,
+  /// colonne a = 1).
+  static bool isLightSquare(String square) {
+    final file = square.codeUnitAt(0) - 'a'.codeUnitAt(0) + 1;
+    final rank = int.parse(square[1]);
+    return (file + rank) % 2 == 1;
+  }
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ChessBoardWidget> createState() => _ChessBoardWidgetState();
+}
+
+/// Polissage : le réglage « Animer les coups » était enregistré mais jamais
+/// appliqué. Quand un NOUVEAU coup arrive (demi-coup suivant : coup de
+/// l'adversaire, de l'IA, clic case par case, avance dans le lecteur), la
+/// pièce glisse de sa case de départ à sa case d'arrivée. Elle est dessinée
+/// dans une couche AU-DESSUS de la grille (sinon les cases peintes après
+/// elle la masqueraient). Pas d'animation pour un coup déposé à la souris
+/// (la pièce est déjà à sa place), ni en reculant ou en reprenant une partie.
+class _ChessBoardWidgetState extends ConsumerState<ChessBoardWidget>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _anim = AnimationController(
+    vsync: this,
+    duration: ChessBoardWidget.animationDuration,
+  )..addStatusListener((status) {
+      if (status == AnimationStatus.completed && mounted) {
+        setState(() => _animMove = null);
+      }
+    });
+
+  /// Coup en cours d'animation et pièce qui glisse.
+  ChessMove? _animMove;
+  String? _animPiece;
+
+  /// Case où l'utilisateur vient de déposer une pièce (coup déjà « vu »).
+  String? _droppedTo;
+
+  @override
+  void dispose() {
+    _anim.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant ChessBoardWidget old) {
+    super.didUpdateWidget(old);
+    final move = widget.lastMove;
+    final prev = old.lastMove;
+    // L'horloge reconstruit l'écran chaque seconde : n'agir que si le
+    // dernier coup a réellement changé.
+    if (move?.ply == prev?.ply && move?.uci == prev?.uci) return;
+
+    final dropped = move != null && _droppedTo == move.to;
+    _droppedTo = null;
+    final isNextMove = move != null && move.ply == (prev?.ply ?? 0) + 1;
+
+    // Effets sonores : chaque nouveau coup, déposé à la souris ou non
+    // (le service ne fait rien si le réglage est désactivé).
+    if (isNextMove) ref.read(soundServiceProvider).play(GameSound.forMove(move!));
+    final piece = move == null ? null : widget.position.pieceAt(move.to);
+
+    if (!isNextMove || dropped || piece == null || !ref.read(settingsProvider).animateMoves) {
+      _anim.stop();
+      _animMove = null;
+      return;
+    }
+    _animMove = move;
+    _animPiece = piece;
+    _anim.forward(from: 0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
-    final theme = boardTheme ?? settings.boardTheme;
-    final targets = settings.showLegalMoves ? legalTargets : const <String>{};
+    final theme = widget.boardTheme ?? settings.boardTheme;
+    final targets = settings.showLegalMoves ? widget.legalTargets : const <String>{};
     return AspectRatio(
       aspectRatio: 1,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final squareSize = constraints.maxWidth / 8;
-          return Column(
-            children: List.generate(8, (rowIdx) {
-              return Row(
-                children: List.generate(8, (colIdx) {
-                  final square = _squareAt(rowIdx, colIdx);
-                  return _buildSquare(
-                    square, squareSize, rowIdx, colIdx,
-                    theme: theme,
-                    targets: targets,
-                    showCoordinates: settings.showCoordinates,
-                  );
-                }),
+          return AnimatedBuilder(
+            animation: _anim,
+            builder: (context, _) {
+              final moving = _animMove;
+              return Stack(
+                children: [
+                  Column(
+                    children: List.generate(8, (rowIdx) {
+                      return Row(
+                        children: List.generate(8, (colIdx) {
+                          final square = _squareAt(rowIdx, colIdx);
+                          return _buildSquare(
+                            square, squareSize, rowIdx, colIdx,
+                            theme: theme,
+                            targets: targets,
+                            showCoordinates: settings.showCoordinates,
+                            // Pendant le glissement, la case d'arrivée est vide.
+                            hidePiece: moving != null && square == moving.to,
+                          );
+                        }),
+                      );
+                    }),
+                  ),
+                  if (moving != null && _animPiece != null)
+                    _slidingPiece(moving, _animPiece!, squareSize),
+                ],
               );
-            }),
+            },
           );
         },
+      ),
+    );
+  }
+
+  Widget _slidingPiece(ChessMove move, String piece, double size) {
+    final t = Curves.easeOutCubic.transform(_anim.value);
+    final (fromRow, fromCol) = _cellOf(move.from);
+    final (toRow, toCol) = _cellOf(move.to);
+    return Positioned(
+      left: (fromCol + (toCol - fromCol) * t) * size,
+      top: (fromRow + (toRow - fromRow) * t) * size,
+      width: size,
+      height: size,
+      child: IgnorePointer(
+        child: Center(child: ChessPieceWidget(pieceCode: piece, size: size)),
       ),
     );
   }
@@ -82,14 +186,17 @@ class ChessBoardWidget extends ConsumerWidget {
     required BoardTheme theme,
     required Set<String> targets,
     required bool showCoordinates,
+    bool hidePiece = false,
   }) {
     final file = square[0];
     final rank = int.parse(square[1]);
     // Sprint 20 : a1 est une case FONCÉE (« blanc à droite »). La formule
     // précédente ((colonne + rangée) % 2 == 1, colonne comptée depuis 0)
     // inversait toutes les couleurs du plateau.
-    final isLight = isLightSquare(square);
-    final piece = position.pieceAt(square);
+    final isLight = ChessBoardWidget.isLightSquare(square);
+    final piece = hidePiece ? null : widget.position.pieceAt(square);
+    final flipped = widget.flipped;
+    final lastMove = widget.lastMove;
 
     // Coordonnées : rangée = colonne 0 en mode normal (colonne 7 en retourné)
     //               colonne = ligne 7 en mode normal (ligne 0 en retourné)
@@ -101,32 +208,34 @@ class ChessBoardWidget extends ConsumerWidget {
       squareSize: size,
       pieceCode: piece,
       isLight: isLight,
-      isSelected: selectedSquare == square,
+      isSelected: widget.selectedSquare == square,
       isLegalTarget: targets.contains(square),
       isLastMoveSrc: lastMove?.from == square,
       isLastMoveDst: lastMove?.to == square,
-      isInCheck: inCheckSquare == square,
+      isInCheck: widget.inCheckSquare == square,
       rankLabel: showRank ? '$rank' : null,
       fileLabel: showFile ? file : null,
-      onTap: () => onSquareTap(square),
-      onPieceDrop: (from) => onPieceDrop(from, square),
+      onTap: () => widget.onSquareTap(square),
+      onPieceDrop: (from) {
+        _droppedTo = square;
+        widget.onPieceDrop(from, square);
+      },
       boardTheme: theme,
     );
   }
 
-  /// Case claire ? a1 foncée, h1 claire, a8 claire (colonne + rangée paire,
-  /// colonne a = 1).
-  static bool isLightSquare(String square) {
-    final file = square.codeUnitAt(0) - 'a'.codeUnitAt(0) + 1;
-    final rank = int.parse(square[1]);
-    return (file + rank) % 2 == 1;
-  }
-
   String _squareAt(int rowIdx, int colIdx) {
-    final rank = flipped ? (rowIdx + 1) : (8 - rowIdx);
-    final fileIdx = flipped ? (7 - colIdx) : colIdx;
+    final rank = widget.flipped ? (rowIdx + 1) : (8 - rowIdx);
+    final fileIdx = widget.flipped ? (7 - colIdx) : colIdx;
     final file = String.fromCharCode('a'.codeUnitAt(0) + fileIdx);
     return '$file$rank';
+  }
+
+  /// (ligne, colonne) d'une case à l'écran — inverse de [_squareAt].
+  (int, int) _cellOf(String square) {
+    final fileIdx = square.codeUnitAt(0) - 'a'.codeUnitAt(0);
+    final rank = int.parse(square[1]);
+    return widget.flipped ? (rank - 1, 7 - fileIdx) : (8 - rank, fileIdx);
   }
 }
 
