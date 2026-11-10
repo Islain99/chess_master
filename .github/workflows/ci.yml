@@ -17,6 +17,14 @@ name: CI/CD — Chess Platform
 #   • helm upgrade --install (premier déploiement possible), Helm installé
 #   • production dépend du build (le staging est sauté sur un tag)
 #   • nouveau job helm-lint ; base et Redis fournis par le chart
+#
+# Novembre 2026 — hébergement sur un VPS (Docker Compose, infra/prod/) :
+#   • deploy-staging / deploy-production (Kubernetes) ne tournent plus que si
+#     la variable de dépôt DEPLOY_TARGET vaut « kubernetes ». Sans cluster,
+#     ils échouaient à chaque push sur main.
+#   • deploy-vps (nouveau) : après les tests, se connecte en SSH au serveur et
+#     lance infra/prod/scripts/deploy.sh. Inactif tant que la variable de
+#     dépôt VPS_HOST n'est pas définie — voir docs/deploiement-vps.md.
 # ─────────────────────────────────────────────────────────────────────────────
 
 on:
@@ -307,7 +315,7 @@ jobs:
     name: Deploy → staging
     runs-on: ubuntu-latest
     needs: docker-build
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && vars.DEPLOY_TARGET == 'kubernetes'
     environment:
       name: staging
       url: https://staging.chess.example.com
@@ -344,7 +352,7 @@ jobs:
     runs-on: ubuntu-latest
     # Sprint 19 : dépend du build (deploy-staging est sauté sur un tag)
     needs: docker-build
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') && vars.DEPLOY_TARGET == 'kubernetes'
     environment:
       name: production
       url: https://chess.example.com
@@ -384,3 +392,48 @@ jobs:
             --set-string secrets.facebookAppSecret="${FB_SECRET}" \
             "${EXTRA[@]}" \
             --wait --timeout 10m
+
+  # ─── 7. Déploiement sur le VPS (main, après les tests) ────────────────────
+  # Le serveur reconstruit lui-même les images (deploy.sh) : ce job attend
+  # seulement que les tests passent, pas docker-build.
+  # Prérequis (docs/deploiement-vps.md, « Déploiement automatique ») :
+  #   variable VPS_HOST (IP), secrets VPS_SSH_KEY et VPS_KNOWN_HOSTS.
+  deploy-vps:
+    name: Deploy → VPS
+    runs-on: ubuntu-latest
+    needs: [backend-ci, client-ci]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.VPS_HOST != ''
+    # Un seul déploiement à la fois, jamais interrompu par un push suivant
+    # (la concurrence globale du workflow annulerait un build à moitié fait).
+    concurrency:
+      group: deploy-vps
+      cancel-in-progress: false
+    timeout-minutes: 50
+    environment:
+      name: vps
+      url: ${{ vars.VPS_URL || format('https://{0}', vars.VPS_HOST) }}
+    steps:
+      - name: Clé SSH et hôte connu
+        env:
+          SSH_KEY:     ${{ secrets.VPS_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          if [ -z "$SSH_KEY" ] || [ -z "$KNOWN_HOSTS" ]; then
+            echo "::error::Secrets VPS_SSH_KEY et VPS_KNOWN_HOSTS requis (docs/deploiement-vps.md)."
+            exit 1
+          fi
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: deploy.sh sur le serveur
+        env:
+          VPS_HOST: ${{ vars.VPS_HOST }}
+          VPS_USER: ${{ vars.VPS_USER || 'deploy' }}
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+              -o StrictHostKeyChecking=yes \
+              -o ServerAliveInterval=30 -o ServerAliveCountMax=10 \
+              "${VPS_USER}@${VPS_HOST}" \
+              'bash ~/chess_master/infra/prod/scripts/deploy.sh'

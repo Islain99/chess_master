@@ -92,11 +92,47 @@ aussi les Backups du Droplet ou copie `~/backups` ailleurs.
 
 ## Mettre à jour
 
-Après un `git push` sur `main` :
+Après un `git push` sur `main`, à la main :
 
 ```bash
 ssh deploy@IP 'bash ~/chess_master/infra/prod/scripts/deploy.sh'
 ```
+
+### Déploiement automatique (optionnel)
+
+Le job `deploy-vps` de la CI lance cette même commande à chaque push sur
+`main`, une fois les tests backend et Flutter passés. Si un test échoue, rien
+n'est déployé. Il reste inactif tant que `VPS_HOST` n'est pas défini.
+
+1. **Créer une clé réservée au déploiement**, sur ton PC (PowerShell) :
+   ```powershell
+   ssh-keygen -t ed25519 -f chess_deploy -N '""' -C "github-actions"
+   ```
+   Cela crée `chess_deploy` (clé privée) et `chess_deploy.pub` (clé publique).
+2. **Autoriser cette clé sur le serveur** : copie le contenu de
+   `chess_deploy.pub` à la fin de `~/.ssh/authorized_keys` de l'utilisateur
+   `deploy` :
+   ```bash
+   nano ~/.ssh/authorized_keys   # coller la ligne, enregistrer
+   ```
+3. **Récupérer l'empreinte du serveur**, sur ton PC :
+   ```powershell
+   ssh-keyscan IP
+   ```
+4. **Dans GitHub** → dépôt → *Settings* → *Secrets and variables* → *Actions* :
+   - onglet *Secrets* : `VPS_SSH_KEY` = tout le contenu du fichier
+     `chess_deploy` (clé privée, lignes `-----BEGIN` et `-----END` comprises) ;
+     `VPS_KNOWN_HOSTS` = la sortie complète de `ssh-keyscan` ;
+   - onglet *Variables* : `VPS_HOST` = l'IP du Droplet. Facultatif :
+     `VPS_URL` = l'adresse du site, affichée dans l'onglet *Environments*.
+5. Supprime les fichiers `chess_deploy` de ton PC une fois la clé copiée dans
+   GitHub.
+
+Pour suivre un déploiement : onglet *Actions* du dépôt, job **Deploy → VPS**.
+Une mise à jour qui touche le client Flutter prend 15 à 30 minutes.
+
+Les jobs Kubernetes (`deploy-staging`, `deploy-production`) ne tournent que si
+la variable `DEPLOY_TARGET` vaut `kubernetes`.
 
 ## Commandes utiles
 
