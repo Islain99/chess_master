@@ -10,7 +10,7 @@
 | Base | `https://<hôte>/api/v1` (exceptions : `GET /metrics`, hors préfixe et non exposé publiquement) |
 | Format | JSON (`Content-Type: application/json`), sauf `GET /games/:id/pgn` (texte) |
 | Authentification | `Authorization: Bearer <accessToken>` — **JWT** valable 15 min |
-| Accès | 🔓 public · 🔐 jeton obligatoire · 🔑 jeton facultatif (identifie le joueur s'il est fourni) |
+| Accès | 🔓 public · 🔐 jeton obligatoire · 🔑 jeton facultatif (identifie le joueur s'il est fourni) · 👮 administrateur (`role = ADMIN`) |
 | Validation | corps validés et nettoyés : les champs inconnus sont retirés |
 | Limitation de débit | par adresse IP : 10 requêtes/s et 300/min → `429` |
 | Énumérations | en MAJUSCULES : `BLITZ`, `MATCHMAKING`, `WHITE_WIN`… |
@@ -146,7 +146,23 @@ Historique, du plus récent au plus ancien, vu **du côté du joueur** :
   "total": 12, "page": 1, "pageSize": 20 }
 ```
 
-`opponent` : `{ type: "user", … }`, `{ type: "ai", level }` ou `null` (partie locale). Les parties contre l'IA créées par un joueur connecté lui sont rattachées.
+`opponent` : `{ type: "user", … }`, `{ type: "ai", level }` ou `null` (partie locale, ou adversaire en ligne dont le compte a été supprimé). Les parties contre l'IA et les parties locales créées par un joueur connecté lui sont rattachées ; pour une partie locale, `outcome` vaut `null` (le résultat est dans `result`).
+
+### DELETE /users/me 🔐
+Suppression définitive du compte connecté (RGPD, Loi 25). Corps :
+
+```json
+{ "confirm": "SUPPRIMER", "password": "…" }
+```
+
+`password` est exigé pour un compte courriel (`authProvider: LOCAL`), ignoré pour Google / Apple / Facebook. → `204`.
+
+| Erreur | Cas |
+|---|---|
+| `400` | `confirm` différent de `SUPPRIMER` (casse ignorée) |
+| `401` | mot de passe absent ou incorrect |
+
+Effets : sortie de la file de matchmaking ; parties en ligne en cours ou en attente passées à `ABORTED` (sans effet sur l'Elo) ; profil, sessions, appareils push, notifications, classements, statistiques et signalements supprimés. Les parties terminées sont conservées, sans lien avec le compte.
 
 ---
 
@@ -297,7 +313,30 @@ Appareils push : `token` est l'identifiant d'installation Firebase reçu par `Fi
 
 ---
 
-## 10. Récapitulatif des routes
+## 10. Anti-triche (`/admin/cheat-reports`) 👮
+
+Réservé aux comptes `role = ADMIN` (relu en base à chaque requête ; `403` sinon). Nommer un administrateur : voir `docs/deploiement-vps.md`.
+
+Signalements créés automatiquement à la fin des parties **classées** :
+
+| Source | Créé par | Critère |
+|---|---|---|
+| `TIMING` | API, fin de partie | temps de réflexion mesurés par le serveur, au moins 10 coups (1er coup exclu) : coups < 100 ms, rythme trop régulier, médiane < 200 ms ; score ≥ 50 |
+| `ACCURACY` | moteur IA, après l'analyse Stockfish de fond (profondeur 12) | précision ≥ 93 % sur au moins 25 coups |
+
+Un signalement n'est pas une sanction.
+
+| Méthode | Route | Réponse |
+|---|---|---|
+| GET | `/admin/cheat-reports?status=OPEN\|DISMISSED\|CONFIRMED` | 100 derniers signalements (défaut `OPEN`), avec `user { id, displayName, email, isActive }` |
+| PATCH | `/admin/cheat-reports/:id` | corps `{ status: "DISMISSED" \| "CONFIRMED", suspend?: boolean }` → signalement mis à jour |
+
+`CheatReport` : `{ id, userId, gameId, source, score, reasons: string[], status, createdAt, reviewedAt }`.
+`suspend: true` avec `CONFIRMED` désactive le compte (`isActive = false`) et révoque ses sessions : connexion et renouvellement refusés.
+
+---
+
+## 11. Récapitulatif des routes
 
 | Méthode | Route | Accès |
 |---|---|---|
@@ -308,6 +347,7 @@ Appareils push : `token` est l'identifiant d'installation Firebase reçu par `Fi
 | GET / PATCH | `/auth/me` | 🔐 |
 | GET | `/users/:id`, `/users/:id/ratings` | 🔓 |
 | GET | `/users/:id/statistics`, `/users/:id/games` | 🔐 |
+| DELETE | `/users/me` | 🔐 |
 | POST | `/games`, `/games/import` | 🔑 |
 | GET | `/games/:id`, `/games/:id/pgn`, `/games/:id/fen` | 🔑 |
 | POST | `/games/:id/moves`, `/undo`, `/resign`, `/draw` | 🔑 |
@@ -316,3 +356,4 @@ Appareils push : `token` est l'identifiant d'installation Firebase reçu par `Fi
 | POST | `/rooms`, `/rooms/:code/join` | 🔐 |
 | GET | `/leaderboard` | 🔓 |
 | GET / PATCH / POST / DELETE | `/notifications/*` | 🔐 |
+| GET / PATCH | `/admin/cheat-reports` | 👮 |

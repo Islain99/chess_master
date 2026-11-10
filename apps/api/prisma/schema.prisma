@@ -113,6 +113,7 @@ model User {
   notifications      Notification[]
   matchmakingEntries MatchmakingQueueEntry[]
   pushDevices        PushDevice[]
+  cheatReports       CheatReport[]
 
   @@unique([authProvider, providerId])
   @@index([email])
@@ -196,8 +197,9 @@ model Game {
   startedAt DateTime?
   endedAt   DateTime?
 
-  moves    Move[]
-  analysis GameAnalysis?
+  moves        Move[]
+  analysis     GameAnalysis?
+  cheatReports CheatReport[]
 
   @@index([status])
   @@index([roomCode])
@@ -274,4 +276,24 @@ model PushDevice {
   lastSeenAt DateTime     @default(now())
 
   @@index([userId])
+}
+
+/// Anti-triche (novembre 2026) : signalement à examiner par un administrateur.
+/// Créé par l'API (temps de réflexion, fin de partie classée) ou par le
+/// moteur IA (précision Stockfish après l'analyse de la partie).
+model CheatReport {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gameId     String
+  game       Game      @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  source     String // TIMING | ACCURACY
+  score      Int // 0–100
+  reasons    String[]
+  status     String    @default("OPEN") // OPEN | DISMISSED | CONFIRMED
+  createdAt  DateTime  @default(now())
+  reviewedAt DateTime?
+
+  @@unique([gameId, userId, source])
+  @@index([status, createdAt])
 }

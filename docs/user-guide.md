@@ -83,6 +83,8 @@ Deux joueurs se partagent l'appareil. Touchez **Partie locale** (ou **Partie loc
 - **½ Nulle** : nulle immédiate si les deux joueurs l'acceptent.
 - **Abandon** : le camp dont c'est le tour abandonne.
 
+Si vous êtes connecté, la partie figure dans **Mes parties** (résultat affiché 1-0, 0-1 ou ½-½).
+
 ---
 
 ## 5. Jouer en ligne
@@ -165,6 +167,10 @@ L'historique de vos parties en deux onglets, **En cours** et **Terminées**, de 
 
 Votre adresse e-mail n'est jamais montrée aux autres joueurs.
 
+### Supprimer mon compte
+
+En bas du profil, **Supprimer mon compte**, puis tapez **SUPPRIMER** (et votre mot de passe si vous vous connectez par courriel). La suppression est **définitive** : profil, classements, statistiques et notifications sont effacés. Vos parties en ligne en cours sont annulées, sans effet sur l'Elo de votre adversaire. Vos parties terminées restent dans l'historique de vos adversaires, sous le nom « Compte supprimé ».
+
 ---
 
 ## 8. Notifications
@@ -175,7 +181,7 @@ L'application vous prévient quand :
 - une partie en ligne **se termine** ;
 - un **adversaire rejoint votre salle privée**.
 
-Elles apparaissent dans **Notifications** (badge du nombre de non-lues, **Tout lire**) et, si vous l'autorisez, en **notification push** sur Android, iOS, macOS et le Web — même application fermée. Toucher une notification push ouvre la liste des notifications.
+Elles apparaissent dans **Notifications** (badge du nombre de non-lues, **Tout lire**) et, si vous l'autorisez, en **notification push** sur Android, iOS, macOS et le Web — même application fermée. Toucher une notification (dans la liste ou en push) ouvre la partie concernée : la partie en cours, ou le lecteur si elle est terminée.
 
 ---
 
@@ -187,9 +193,9 @@ Elles apparaissent dans **Notifications** (badge du nombre de non-lues, **Tout l
 | **Pièces** | Classique, Contrasté, Contour, Lettres (R D T F C P : roi, dame, tour, fou, cavalier, pion — utile en cas de basse vision) |
 | Afficher les coordonnées | lettres a-h et chiffres 1-8 sur les bords du plateau |
 | Afficher les coups légaux | points sur les cases accessibles à la pièce sélectionnée |
-| Animer les coups | *pas encore actif* |
-| Retourner automatiquement (IA) | *pas encore actif* |
-| Effets sonores | *pas encore actif* |
+| Animer les coups | la pièce glisse de sa case de départ à sa case d'arrivée (coups de l'adversaire, de l'IA, du lecteur) |
+| Retourner le plateau à chaque coup (partie locale) | le plateau se tourne vers le camp qui doit jouer ; le bouton **Retourner** inverse ce sens |
+| Effets sonores | son du coup, de la prise et de l'échec ; son à l'arrivée d'une notification (sur le Web, après un premier clic sur la page) |
 
 Les réglages sont enregistrés sur l'appareil.
 

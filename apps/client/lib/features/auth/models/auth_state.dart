@@ -7,6 +7,7 @@ class AuthUser {
     this.avatarUrl,
     this.country,
     required this.role,
+    this.authProvider = 'LOCAL',
   });
 
   final String id;
@@ -16,6 +17,12 @@ class AuthUser {
   final String? country;
   final String role;
 
+  /// LOCAL (courriel / mot de passe), GOOGLE, APPLE ou FACEBOOK.
+  final String authProvider;
+
+  /// Compte à mot de passe : exigé pour confirmer une suppression.
+  bool get hasPassword => authProvider == 'LOCAL';
+
   factory AuthUser.fromJson(Map<String, dynamic> json) => AuthUser(
         id:          json['id'] as String,
         email:       json['email'] as String? ?? '',
@@ -23,6 +30,7 @@ class AuthUser {
         avatarUrl:   json['avatarUrl'] as String?,
         country:     json['country'] as String?,
         role:        json['role'] as String? ?? 'PLAYER',
+        authProvider: json['authProvider'] as String? ?? 'LOCAL',
       );
 
   @override

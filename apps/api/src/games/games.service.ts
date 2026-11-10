@@ -32,6 +32,7 @@ import { ChessEngineService } from './chess-engine.service';
 import { AiEngineService } from './ai/ai-engine.service';
 import { StockfishClientService } from './ai/stockfish-client.service';
 import { RatingsService } from '../ratings/ratings.service';
+import { AntiCheatService } from '../anti-cheat/anti-cheat.service';
 import { CreateGameDto } from './dto/create-game.dto';
 import { MakeMoveDto } from './dto/make-move.dto';
 import { DRAW_OFFER_STORE, DrawOfferStore, MemoryDrawOfferStore } from './draw-offer.store';
@@ -64,6 +65,9 @@ export class GamesService {
     private readonly stockfishClient: StockfishClientService,
     private readonly ratingsService: RatingsService,
     @Optional() @Inject(DRAW_OFFER_STORE) drawOffers?: DrawOfferStore,
+    // Novembre 2026 : contrôle anti-triche des parties classées (facultatif
+    // pour les tests unitaires qui ne le fournissent pas).
+    @Optional() private readonly antiCheat?: AntiCheatService,
   ) {
     this.drawOffers = drawOffers ?? new MemoryDrawOfferStore();
   }
@@ -277,6 +281,7 @@ export class GamesService {
       this.ratingsService.updateAfterGame(id).catch((err) =>
         this.logger.warn(`Mise à jour Elo échouée pour ${id} : ${err}`),
       );
+      this.reviewForCheating(id);
     }
 
     return {
@@ -561,7 +566,15 @@ export class GamesService {
       this.ratingsService.updateAfterGame(game.id).catch((err) =>
         this.logger.warn(`Mise à jour Elo échouée pour ${game.id} : ${err}`),
       );
+      this.reviewForCheating(game.id);
     }
+  }
+
+  /** Anti-triche en arrière-plan : ne retarde ni ne fait échouer la partie. */
+  private reviewForCheating(gameId: string) {
+    this.antiCheat?.reviewFinishedGame(gameId).catch((err) =>
+      this.logger.warn(`Contrôle anti-triche échoué pour ${gameId} : ${err}`),
+    );
   }
 
   // ──────────────────────────────────────────────

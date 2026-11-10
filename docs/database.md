@@ -145,6 +145,19 @@ erDiagram
   User ||--o{ MatchmakingQueueEntry : "user"
   User ||--o{ Notification : "user"
   User ||--o{ PushDevice : "user"
+  CheatReport {
+    string id PK
+    string userId FK
+    string gameId FK
+    string source
+    int score
+    string[] reasons
+    string status
+    datetime createdAt
+    datetime reviewedAt "nullable"
+  }
+  User ||--o{ CheatReport : "user"
+  Game ||--o{ CheatReport : "game"
 ```
 
 Légende : **PK** clé primaire · **FK** clé étrangère · **UK** unicité (seule ou combinée, voir § 2) · `nullable` valeur facultative. Cardinalités Mermaid : `||` exactement un, `|o` zéro ou un, `o{` zéro ou plusieurs.
@@ -272,6 +285,16 @@ Index : `(userId, isRead)` pour le compteur de non-lues.
 | `platform` | `ANDROID`, `IOS`, `MACOS`, `WEB` |
 | `lastSeenAt` | dernière inscription ; les jetons déclarés invalides par FCM sont supprimés à l'envoi |
 
+### `CheatReport` — signalements anti-triche (novembre 2026)
+
+| Colonne | Règle |
+|---|---|
+| `source` | `TIMING` (temps de réflexion, API) ou `ACCURACY` (précision Stockfish, moteur IA) |
+| `score` | 0–100 ; signalement créé à partir de 50 |
+| `reasons` | explications lisibles (ex. « 100 % des coups joués en < 100 ms ») |
+| `status` | `OPEN`, `DISMISSED` ou `CONFIRMED` (revue par un administrateur) |
+| unicité | (`gameId`, `userId`, `source`) : une ré-analyse met à jour le signalement existant |
+
 ---
 
 ## 3. Énumérations
@@ -312,11 +335,11 @@ Côté TypeScript, ces énumérations sont réexportées par `apps/api/src/commo
 
 | Relation | À la suppression du parent |
 |---|---|
-| `User` → `RefreshToken`, `Rating`, `UserStatistics`, `Notification`, `PushDevice`, `MatchmakingQueueEntry` | **cascade** |
-| `User` → `Game` (blancs / noirs) | **refusée** tant que des parties le référencent (historique conservé) |
-| `Game` → `Move`, `GameAnalysis` | **cascade** |
+| `User` → `RefreshToken`, `Rating`, `UserStatistics`, `Notification`, `PushDevice`, `MatchmakingQueueEntry`, `CheatReport` | **cascade** |
+| `User` → `Game` (blancs / noirs) | parties **détachées** (`whitePlayerId` / `blackPlayerId` à `NULL`) par la suppression de compte, avant de supprimer le joueur : l'historique des adversaires est conservé |
+| `Game` → `Move`, `GameAnalysis`, `CheatReport` | **cascade** |
 
-Il n'existe pas encore de suppression de compte dans l'application. Pour l'implémenter (exigence RGPD / Loi 25), il faudra anonymiser les parties (`whitePlayerId` / `blackPlayerId` à `NULL`) avant de supprimer le compte.
+Suppression de compte (`DELETE /users/me`, RGPD / Loi 25) : en une transaction, parties en ligne non terminées passées à `ABORTED`, toutes les parties détachées, puis compte supprimé (cascade ci-dessus).
 
 ---
 

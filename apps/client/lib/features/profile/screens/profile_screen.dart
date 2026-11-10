@@ -246,6 +246,26 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               await ref.read(authProvider.notifier).logout();
             },
           ),
+          const Gap(28),
+          // Novembre 2026 : suppression de compte (RGPD, Loi 25).
+          TextButton.icon(
+            icon: const Icon(Icons.delete_forever_outlined),
+            label: const Text('Supprimer mon compte'),
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFFCA3431)),
+            onPressed: () async {
+              final deleted = await showDialog<bool>(
+                context: context,
+                builder: (_) => DeleteAccountDialog(hasPassword: user.hasPassword),
+              );
+              if (deleted == true && context.mounted) {
+                final messenger = ScaffoldMessenger.of(context);
+                Navigator.pop(context);
+                messenger.showSnackBar(
+                  const SnackBar(content: Text('Votre compte a été supprimé.')),
+                );
+              }
+            },
+          ),
         ],
       ),
     );
@@ -353,4 +373,114 @@ class _StatTile extends StatelessWidget {
           ]),
         ),
       );
+}
+
+/// Confirmation de suppression : taper SUPPRIMER (+ mot de passe si le compte
+/// en a un). Renvoie true une fois le compte supprimé.
+class DeleteAccountDialog extends ConsumerStatefulWidget {
+  const DeleteAccountDialog({super.key, required this.hasPassword});
+  final bool hasPassword;
+
+  @override
+  ConsumerState<DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends ConsumerState<DeleteAccountDialog> {
+  final _confirm = TextEditingController();
+  final _password = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  bool get _canSubmit =>
+      !_busy &&
+      _confirm.text.trim().toUpperCase() == 'SUPPRIMER' &&
+      (!widget.hasPassword || _password.text.isNotEmpty);
+
+  @override
+  void dispose() {
+    _confirm.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await ref.read(authProvider.notifier).deleteAccount(
+            password: widget.hasPassword ? _password.text : null,
+          );
+      if (mounted) Navigator.pop(context, true);
+    } on ApiException catch (e) {
+      setState(() {
+        _busy = false;
+        _error = e.message;
+      });
+    } catch (_) {
+      setState(() {
+        _busy = false;
+        _error = 'Serveur injoignable. Réessayez plus tard.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppTheme.surface,
+      title: const Text('Supprimer mon compte', style: TextStyle(color: Colors.white)),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Votre profil, vos classements, vos statistiques et vos notifications '
+              'seront effacés définitivement. Vos parties terminées resteront dans '
+              'l\'historique de vos adversaires, sous « Compte supprimé ». '
+              'Vos parties en ligne en cours seront annulées.',
+              style: TextStyle(color: Colors.white70, height: 1.4),
+            ),
+            const Gap(16),
+            if (widget.hasPassword) ...[
+              TextField(
+                controller: _password,
+                obscureText: true,
+                enabled: !_busy,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(labelText: 'Mot de passe'),
+              ),
+              const Gap(12),
+            ],
+            TextField(
+              key: const ValueKey('delete-confirm'),
+              controller: _confirm,
+              enabled: !_busy,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(labelText: 'Tapez SUPPRIMER pour confirmer'),
+            ),
+            if (_error != null) ...[
+              const Gap(12),
+              Text(_error!, style: const TextStyle(color: Color(0xFFCA3431))),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.pop(context, false),
+          child: const Text('Annuler'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: const Color(0xFFCA3431)),
+          onPressed: _canSubmit ? _submit : null,
+          child: _busy
+              ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Supprimer définitivement'),
+        ),
+      ],
+    );
+  }
 }

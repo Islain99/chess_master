@@ -102,6 +102,18 @@ voir l'en-tête de `scripts/backup-db.sh`.
 Ces fichiers restent sur le même serveur. Pour une vraie protection, active
 aussi les Backups du Droplet ou copie `~/backups` ailleurs.
 
+## Compte administrateur (anti-triche)
+
+Les signalements anti-triche (`/admin/cheat-reports`, voir
+`docs/api-rest-spec.md`) sont réservés aux administrateurs. Pour nommer le
+tien, une fois ton compte créé sur le site :
+
+```bash
+cd ~/chess_master/infra/prod
+docker compose exec postgres psql -U chess chess \
+  -c "UPDATE \"User\" SET role = 'ADMIN' WHERE email = 'toi@exemple.com';"
+```
+
 ## Mettre à jour
 
 Après un `git push` sur `main`, à la main :

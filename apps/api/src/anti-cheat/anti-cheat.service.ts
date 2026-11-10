@@ -1,16 +1,28 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { AnalysisService } from '../analysis/analysis.service';
+import { GameMode } from '../common/prisma-enums';
+import { PrismaService } from '../prisma/prisma.service';
 
 /**
  * Service de détection anti-triche.
  *
- * Détecte les patterns suspects dans le jeu :
- * - Coups joués trop rapidement (bot possible)
- * - Séquences de coups parfaits sur de nombreux mouvements
- * - Temps de réflexion identiques (bot à timing fixe)
+ * Sprint 10 : détection des temps de réflexion suspects (journal seulement).
+ * Novembre 2026 : branché sur les fins de partie classées.
  *
- * Sprint 10 : détection et journalisation.
- * Sprint futur : intégration du système de rapport et de suspension.
+ *   1. Temps de réflexion — mesurés par le SERVEUR (le client ne peut pas les
+ *      falsifier) : coups trop rapides, rythme trop régulier (bot à délai
+ *      fixe), médiane anormalement basse.
+ *   2. Précision Stockfish — l'analyse de la partie est lancée en arrière-plan ;
+ *      le moteur IA crée un signalement si un joueur dépasse le seuil de
+ *      précision sur une longue partie (apps/ai-engine, analysis.processor).
+ *
+ * Un signalement (CheatReport) n'est PAS une sanction : un administrateur le
+ * classe (DISMISSED) ou le confirme (CONFIRMED), avec suspension facultative.
  */
+export const REPORT_SOURCES = ['TIMING', 'ACCURACY'] as const;
+export const REPORT_STATUSES = ['OPEN', 'DISMISSED', 'CONFIRMED'] as const;
+export type ReportStatus = (typeof REPORT_STATUSES)[number];
+
 @Injectable()
 export class AntiCheatService {
   private readonly logger = new Logger(AntiCheatService.name);
@@ -23,6 +35,20 @@ export class AntiCheatService {
 
   /** Ratio de coups trop rapides déclenchant une alerte */
   private readonly SPEED_FLAG_RATIO = 0.7;
+
+  /** Coups minimum d'un joueur pour juger son rythme (bruit sinon). */
+  static readonly MIN_MOVES_FOR_TIMING = 10;
+
+  /** Score à partir duquel un signalement est créé. */
+  static readonly REPORT_THRESHOLD = 50;
+
+  /** Profondeur de l'analyse Stockfish lancée en arrière-plan. */
+  static readonly BACKGROUND_ANALYSIS_DEPTH = 12;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly analysis: AnalysisService,
+  ) {}
 
   /**
    * Analyse les temps de réflexion d'un joueur sur les derniers coups.
@@ -63,40 +89,101 @@ export class AntiCheatService {
       score += 20;
     }
 
-    if (score > 0) {
-      this.logger.warn(
-        `AntiCheat — score ${score}/100 : ${flags.join(' | ')}`,
-      );
-    }
-
     return { suspicionScore: Math.min(100, score), flags };
   }
 
   /**
-   * Valide le timing d'un coup individuel.
-   * Retourne false si le timing est manifestement invalide.
+   * Fin d'une partie classée : contrôle des temps de réflexion de chaque
+   * joueur, puis analyse Stockfish en arrière-plan (contrôle de précision).
+   * Renvoie les signalements créés ou mis à jour.
    */
-  validateMoveTime(timeSpentMs: number, gameMode: string): boolean {
-    // En mode IA ou local, pas de contrainte stricte
-    if (gameMode !== 'MATCHMAKING') return true;
+  async reviewFinishedGame(gameId: string) {
+    const game = await this.prisma.game.findUnique({
+      where: { id: gameId },
+      include: { moves: { orderBy: { ply: 'asc' } } },
+    });
+    if (!game || game.mode !== GameMode.MATCHMAKING) return [];
 
-    // Coup négatif ou impossiblement rapide
-    if (timeSpentMs < 0 || timeSpentMs > 60 * 60 * 1_000) return false;
+    const reports: Array<Awaited<ReturnType<AntiCheatService['report']>>> = [];
+    const seats: Array<[string | null, 'WHITE' | 'BLACK']> = [
+      [game.whitePlayerId, 'WHITE'],
+      [game.blackPlayerId, 'BLACK'],
+    ];
+    for (const [userId, color] of seats) {
+      if (!userId) continue;
+      // Le premier coup de chaque camp inclut l'attente du début de partie.
+      const times = game.moves
+        .filter((m) => m.player === color)
+        .slice(1)
+        .map((m) => m.timeSpentMs);
+      if (times.length < AntiCheatService.MIN_MOVES_FOR_TIMING) continue;
 
-    return true;
+      const { suspicionScore, flags } = this.analyzeMoveTimes(times);
+      if (suspicionScore < AntiCheatService.REPORT_THRESHOLD) continue;
+      reports.push(await this.report(userId, game.id, 'TIMING', suspicionScore, flags));
+    }
+
+    // Le contrôle de précision se fait dans le moteur IA après l'analyse.
+    await this.analysis
+      .requestAnalysis(game.id, AntiCheatService.BACKGROUND_ANALYSIS_DEPTH)
+      .catch((err) => this.logger.warn(`Analyse de fond non lancée pour ${game.id} : ${err}`));
+
+    return reports;
+  }
+
+  /** Crée (ou met à jour) le signalement d'un joueur pour une partie. */
+  async report(
+    userId: string,
+    gameId: string,
+    source: (typeof REPORT_SOURCES)[number],
+    score: number,
+    reasons: string[],
+  ) {
+    this.logger.warn(
+      `[ANTI-CHEAT] ${source} userId=${userId} gameId=${gameId} score=${score} : ${reasons.join(' | ')}`,
+    );
+    return this.prisma.cheatReport.upsert({
+      where: { gameId_userId_source: { gameId, userId, source } },
+      create: { userId, gameId, source, score, reasons },
+      update: { score, reasons },
+    });
+  }
+
+  // ──────────────────────────────────────────────
+  // Administration
+  // ──────────────────────────────────────────────
+
+  listReports(status: ReportStatus = 'OPEN') {
+    return this.prisma.cheatReport.findMany({
+      where: { status },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      include: { user: { select: { id: true, displayName: true, email: true, isActive: true } } },
+    });
   }
 
   /**
-   * Journalise un événement suspect pour révision manuelle.
+   * Classe ou confirme un signalement. `suspend` (avec CONFIRMED) désactive
+   * le compte et révoque ses sessions : connexion et renouvellement refusés.
    */
-  logSuspiciousActivity(
-    userId: string,
-    gameId: string,
-    reason: string,
-  ): void {
-    this.logger.warn(
-      `[ANTI-CHEAT] userId=${userId} gameId=${gameId} : ${reason}`,
-    );
-    // TODO sprint futur : émettre un événement Notification + créer un rapport en BDD
+  async reviewReport(id: string, status: Exclude<ReportStatus, 'OPEN'>, suspend = false) {
+    const report = await this.prisma.cheatReport.findUnique({ where: { id } });
+    if (!report) throw new NotFoundException(`Signalement ${id} introuvable.`);
+
+    const updated = await this.prisma.cheatReport.update({
+      where: { id },
+      data: { status, reviewedAt: new Date() },
+    });
+    if (status === 'CONFIRMED' && suspend) {
+      await this.prisma.$transaction([
+        this.prisma.user.update({ where: { id: report.userId }, data: { isActive: false } }),
+        this.prisma.refreshToken.updateMany({
+          where: { userId: report.userId, revokedAt: null },
+          data: { revokedAt: new Date() },
+        }),
+      ]);
+      this.logger.warn(`[ANTI-CHEAT] compte ${report.userId} suspendu (signalement ${id})`);
+    }
+    return updated;
   }
 }

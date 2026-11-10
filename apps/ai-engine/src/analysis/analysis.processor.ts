@@ -156,6 +156,62 @@ export class AnalysisProcessor extends WorkerHost {
       `Analyse terminée : partie ${gameId} — ` +
       `Blancs ${accuracyWhite.toFixed(1)}% / Noirs ${accuracyBlack.toFixed(1)}%`,
     );
+
+    // Novembre 2026 : contrôle anti-triche (parties classées uniquement).
+    const bestMatches = (player: string) =>
+      evaluations.filter((e) => e.player === player && e.uci === e.bestUci).length;
+    await this.flagSuspiciousAccuracy(gameId, [
+      { color: 'WHITE', accuracy: accuracyWhite, moves: whiteMoves, best: bestMatches('WHITE') },
+      { color: 'BLACK', accuracy: accuracyBlack, moves: blackMoves, best: bestMatches('BLACK') },
+    ]).catch((err) => this.logger.warn(`Contrôle anti-triche échoué pour ${gameId} : ${err}`));
+  }
+
+  // ──────────────────────────────────────────────
+  // Anti-triche : précision anormalement élevée
+  // ──────────────────────────────────────────────
+
+  /** Précision (%) à partir de laquelle une partie est signalée. */
+  static readonly ACCURACY_THRESHOLD = 93; // ≈ 7 cp perdus par coup en moyenne
+
+  /** Coups minimum d'un joueur : une partie courte peut être parfaite. */
+  static readonly MIN_MOVES_FOR_ACCURACY = 25;
+
+  /**
+   * Crée un signalement (table CheatReport, revue par un administrateur)
+   * pour un joueur d'une partie classée dont la précision dépasse le seuil.
+   * Le signalement n'est pas une sanction.
+   */
+  private async flagSuspiciousAccuracy(
+    gameId: string,
+    sides: Array<{ color: 'WHITE' | 'BLACK'; accuracy: number; moves: number; best: number }>,
+  ) {
+    const game = await this.prisma.game.findUnique({
+      where: { id: gameId },
+      select: { mode: true, whitePlayerId: true, blackPlayerId: true },
+    });
+    if (!game || game.mode !== 'MATCHMAKING') return;
+
+    for (const side of sides) {
+      const userId = side.color === 'WHITE' ? game.whitePlayerId : game.blackPlayerId;
+      if (
+        !userId ||
+        side.moves < AnalysisProcessor.MIN_MOVES_FOR_ACCURACY ||
+        side.accuracy < AnalysisProcessor.ACCURACY_THRESHOLD
+      ) {
+        continue;
+      }
+      const score = Math.min(100, Math.round(50 + (side.accuracy - AnalysisProcessor.ACCURACY_THRESHOLD) * 7));
+      const reasons = [
+        `Précision ${side.accuracy.toFixed(1)} % sur ${side.moves} coups (seuil ${AnalysisProcessor.ACCURACY_THRESHOLD} %)`,
+        `${Math.round((side.best / side.moves) * 100)} % des coups identiques au meilleur coup de Stockfish`,
+      ];
+      this.logger.warn(`[ANTI-CHEAT] ACCURACY userId=${userId} gameId=${gameId} score=${score}`);
+      await this.prisma.cheatReport.upsert({
+        where: { gameId_userId_source: { gameId, userId, source: 'ACCURACY' } },
+        create: { gameId, userId, source: 'ACCURACY', score, reasons },
+        update: { score, reasons },
+      });
+    }
   }
 
   // ──────────────────────────────────────────────

@@ -239,6 +239,27 @@ class AuthNotifier extends StateNotifier<AsyncValue<AuthState>> {
     _setSession(const AuthState());
   }
 
+  // ─── Suppression du compte (novembre 2026) ─────────────────────────────────
+
+  /// Supprime définitivement le compte (DELETE /users/me), puis ferme la
+  /// session locale. Lève [ApiException] si le serveur refuse (mot de passe
+  /// incorrect…) : la session reste alors ouverte.
+  Future<void> deleteAccount({String? password}) async {
+    final tokens = state.valueOrNull?.tokens;
+    if (tokens == null) {
+      throw const ApiException(statusCode: 401, error: 'AUTH_REQUIRED', message: 'Connexion requise.');
+    }
+    await ApiClient(accessToken: tokens.accessToken).delete('/users/me', {
+      'confirm': 'SUPPRIMER',
+      if (password != null && password.isNotEmpty) 'password': password,
+    });
+    // Sessions, appareils push, etc. sont déjà effacés côté serveur.
+    await _oauth?.signOutAll();
+    _refreshTimer?.cancel();
+    await _clearStorage();
+    _setSession(const AuthState());
+  }
+
   // ─── Renouvellement silencieux ────────────────────────────────────────────
 
   Future<void> _silentRefresh(String refreshToken) async {

@@ -47,6 +47,8 @@ class GameSummary {
     if (opponentName != null) return opponentName!;
     if (mode == 'AI') return 'IA niveau ${aiLevel ?? '?'}';
     if (mode == 'PRIVATE' && status == 'WAITING') return 'En attente d\'un adversaire';
+    // Novembre 2026 : adversaire en ligne dont le compte a été supprimé.
+    if (isOnline) return 'Compte supprimé';
     return 'Partie locale';
   }
 

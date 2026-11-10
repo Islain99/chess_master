@@ -1,17 +1,40 @@
 import {
+  Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Param,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RequestUser } from '../auth/strategies/jwt.strategy';
 import { GameStatus } from '../common/prisma-enums';
+import { AccountService, DeleteAccountDto } from './account.service';
 import { UsersService } from './users.service';
 
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly accountService: AccountService,
+  ) {}
+
+  /**
+   * DELETE /users/me — suppression définitive du compte connecté.
+   * Corps : { confirm: "SUPPRIMER", password?: "…" } (mot de passe exigé pour
+   * un compte courriel). Déclarée avant `:id` par lisibilité (méthode différente).
+   */
+  @Delete('me')
+  @HttpCode(204)
+  @UseGuards(JwtAuthGuard)
+  async deleteMe(@Req() req: Request, @Body() dto: DeleteAccountDto) {
+    const user = req.user as RequestUser;
+    await this.accountService.deleteAccount(user.userId, dto);
+  }
 
   /** GET /users/:id — profil public */
   @Get(':id')
