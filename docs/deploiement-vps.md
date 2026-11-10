@@ -81,7 +81,19 @@ lourde). Les mises à jour suivantes sont plus rapides grâce au cache Docker.
 ## 6. Sauvegardes quotidiennes de la base
 
 ```bash
-(crontab -l 2>/dev/null; echo "15 4 * * * $HOME/chess_master/infra/prod/scripts/backup-db.sh >> $HOME/backups/backup.log 2>&1") | crontab -
+bash ~/chess_master/infra/prod/scripts/install-backup-timer.sh
+```
+
+Le script installe un minuteur systemd et fait tout de suite une première
+sauvegarde. Il remplace la tâche cron de la première version de ce guide, qui
+échouait avec `Permission denied` (si elle est installée : `crontab -r`). Il en
+fait ensuite une chaque jour à 4 h 15 UTC, et rattrape celle qu'il aurait
+manquée si le serveur était éteint. Vérifier :
+
+```bash
+systemctl list-timers chess-backup.timer   # prochaine exécution
+journalctl -u chess-backup --since today   # journal
+ls -lh ~/backups
 ```
 
 Les sauvegardes vont dans `~/backups`, gardées 14 jours. Pour en restaurer une,

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
 # Sauvegarde PostgreSQL quotidienne, conservée 14 jours.
-# Installer la tâche (en tant que deploy) :
-#   (crontab -l 2>/dev/null; echo "15 4 * * * $HOME/chess_master/infra/prod/scripts/backup-db.sh >> $HOME/backups/backup.log 2>&1") | crontab -
+# Planification : install-backup-timer.sh (minuteur systemd, 04 h 15 UTC).
+# Lancement manuel possible : bash backup-db.sh
 #
 # Restaurer une sauvegarde :
 #   gunzip -c ~/backups/chess-AAAAMMJJ-HHMM.sql.gz | \
