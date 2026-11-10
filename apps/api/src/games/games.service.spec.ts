@@ -98,6 +98,26 @@ describe('GamesService', () => {
       expect(result.legalMoves).toHaveLength(20);
     });
 
+    it('rattache une partie LOCAL au joueur connecté (historique)', async () => {
+      mockPrisma.game.create.mockResolvedValue(mockGame);
+      await service.create(
+        { mode: GameMode.LOCAL, timeControl: TimeControlCategory.RAPID },
+        { userId: 'alice' },
+      );
+      expect(mockPrisma.game.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ mode: GameMode.LOCAL, whitePlayerId: 'alice' }),
+        }),
+      );
+    });
+
+    it('laisse anonyme une partie LOCAL créée sans compte', async () => {
+      mockPrisma.game.create.mockResolvedValue(mockGame);
+      await service.create({ mode: GameMode.LOCAL, timeControl: TimeControlCategory.RAPID });
+      const data = mockPrisma.game.create.mock.calls[0][0].data;
+      expect(data.whitePlayerId).toBeUndefined();
+    });
+
     it('lance une erreur si aiLevel manque pour le mode AI', async () => {
       await expect(
         service.create({

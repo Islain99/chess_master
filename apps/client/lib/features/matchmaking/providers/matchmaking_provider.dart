@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/http/api_client.dart';
 import '../../../core/services/socket_service.dart';
 import '../../auth/providers/auth_provider.dart';
 
@@ -125,7 +126,8 @@ class MatchmakingNotifier extends StateNotifier<MatchmakingState> {
   // ─── Privé ─────────────────────────────────────────────────────────────────
 
   void _connectAndSubscribe() {
-    _ws.connectLobby(token: _token);
+    // Jeton courant : celui capturé à la création a pu expirer depuis.
+    _ws.connectLobby(token: SessionToken.current ?? _token);
 
     _ws.onLobby('lobby:queued', (data) {
       state = state.copyWith(elo: data['elo'] as int?);

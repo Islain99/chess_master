@@ -75,8 +75,12 @@ export class GamesService {
   /**
    * Crée une partie LOCAL ou AI.
    * Sprint 18 : une partie contre l'IA créée par un joueur connecté lui est
-   * rattachée (blancs) → elle apparaît dans « Mes parties ». Les parties
-   * LOCAL restent anonymes (deux joueurs sur le même appareil).
+   * rattachée (blancs) → elle apparaît dans « Mes parties ».
+   * Polissage : les parties LOCAL d'un joueur connecté lui sont aussi
+   * rattachées (côté blancs, sans adversaire) pour figurer dans son
+   * historique. Les règles d'accès ne changent pas (LOCAL / AI restent
+   * jouables par l'identifiant de partie) et le classement ne compte que
+   * les parties MATCHMAKING.
    */
   async create(dto: CreateGameDto, actor?: Actor) {
     // Sprint 17 : une partie en ligne créée ici n'aurait aucun joueur assigné
@@ -100,7 +104,7 @@ export class GamesService {
         incrementSeconds: 0,
         whitePlayerType: PlayerType.HUMAN,
         blackPlayerType: dto.mode === GameMode.AI ? PlayerType.AI : PlayerType.HUMAN,
-        whitePlayerId: dto.mode === GameMode.AI ? actor?.userId : undefined,
+        whitePlayerId: actor?.userId,
         aiLevel: dto.aiLevel,
         aiTargetElo: dto.aiTargetElo,
         status: GameStatus.ONGOING,

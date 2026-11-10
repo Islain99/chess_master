@@ -5,6 +5,7 @@ import '../../../core/settings/settings_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../models/board_position.dart';
 import '../models/chess_move.dart';
+import 'chess_piece.dart';
 import 'chess_square.dart';
 
 /// Plateau d'échecs interactif 8×8.
@@ -143,8 +144,6 @@ class PromotionDialog extends StatelessWidget {
   final void Function(String pieceType) onSelect;
 
   static const _pieces = ['Q', 'R', 'B', 'N'];
-  static const _labels = {'Q': '♛', 'R': '♜', 'B': '♝', 'N': '♞'};
-  static const _labelsWhite = {'Q': '♕', 'R': '♖', 'B': '♗', 'N': '♘'};
 
   @override
   Widget build(BuildContext context) {
@@ -165,8 +164,8 @@ class PromotionDialog extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: _pieces.map((p) {
-                final symbols = color == 'w' ? _labelsWhite : _labels;
                 return GestureDetector(
+                  key: ValueKey('promotion-${p.toLowerCase()}'),
                   onTap: () {
                     Navigator.of(context).pop();
                     onSelect(p.toLowerCase());
@@ -178,17 +177,10 @@ class PromotionDialog extends StatelessWidget {
                       color: AppTheme.primary,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Center(
-                      child: Text(
-                        // Sprint 20 : sélecteur U+FE0E (présentation texte),
-                        // sinon Android / iOS affichent ♛ en emoji.
-                        '${symbols[p] ?? p}\uFE0E',
-                        style: TextStyle(
-                          fontSize: 36,
-                          color: color == 'w' ? Colors.white : Colors.black,
-                        ),
-                      ),
-                    ),
+                    // Polissage : mêmes pièces que sur le plateau (style choisi
+                    // dans les Paramètres) au lieu de glyphes à part.
+                    alignment: Alignment.center,
+                    child: ChessPieceWidget(pieceCode: '$color$p', size: 52),
                   ),
                 );
               }).toList(),

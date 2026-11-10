@@ -123,8 +123,12 @@ export function toGameSummary(game: GameRow, userId: string) {
   const color: 'white' | 'black' = game.blackPlayerId === userId ? 'black' : 'white';
   const opponent = color === 'white' ? game.blackPlayer : game.whitePlayer;
 
+  // Partie locale : les deux camps sont joués sur le même appareil, une
+  // « victoire » du créateur n'a pas de sens → pas d'issue (le client
+  // affiche le résultat blanc / noir).
   let outcome: 'win' | 'loss' | 'draw' | null = null;
-  if (game.result === 'DRAW') outcome = 'draw';
+  if (game.mode === 'LOCAL') outcome = null;
+  else if (game.result === 'DRAW') outcome = 'draw';
   else if (game.result === 'WHITE_WIN') outcome = color === 'white' ? 'win' : 'loss';
   else if (game.result === 'BLACK_WIN') outcome = color === 'black' ? 'win' : 'loss';
 

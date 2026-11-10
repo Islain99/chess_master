@@ -273,7 +273,7 @@ class MultiplayerNotifier extends StateNotifier<AsyncValue<OnlineGameState>> {
   }
 
   void _connectAndJoin(String gameId) {
-    _ws.connectGame(token: _token);
+    _ws.connectGame(token: SessionToken.current ?? _token);
     // Attendre la connexion puis émettre game:join
     _ws.onGame('connect', (_) {
       _ws.emitGame('game:join', {'gameId': gameId});
@@ -282,7 +282,7 @@ class MultiplayerNotifier extends StateNotifier<AsyncValue<OnlineGameState>> {
   }
 
   void _listenLobby(String roomCode) {
-    _ws.connectLobby(token: _token);
+    _ws.connectLobby(token: SessionToken.current ?? _token);
     _ws.onLobby('connect', (_) {
       _ws.emitLobby('lobby:waitRoom', {'roomCode': roomCode});
     });

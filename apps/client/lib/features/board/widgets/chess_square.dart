@@ -49,7 +49,15 @@ class ChessSquare extends StatelessWidget {
       child: DragTarget<String>(
         onAcceptWithDetails: (details) => onPieceDrop?.call(details.data),
         builder: (context, candidateData, _) {
-          return Stack(
+          // Polissage : la case est posée dans une Row, qui laisse sa largeur
+          // libre. Le Center se réduisait alors à la taille de son enfant et
+          // le Stack (aligné en haut à gauche par défaut) collait pièces et
+          // points de coup légal dans le coin supérieur gauche. Taille fixée
+          // + alignement centré : tout est centré dans la case.
+          return SizedBox.square(
+            dimension: squareSize,
+            child: Stack(
+            alignment: Alignment.center,
             children: [
               // ─── Fond de case ──────────────────────────────────────────
               Container(
@@ -119,6 +127,7 @@ class ChessSquare extends StatelessWidget {
                   ),
                 ),
             ],
+            ),
           );
         },
       ),

@@ -95,11 +95,19 @@ class _GameTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Polissage : une partie terminée sans issue « pour le joueur » (partie
+    // locale, partie abandonnée) s'affichait « En cours ».
     final (String badge, Color badgeColor) = switch (game.outcome) {
       'win' => ('Victoire', const Color(0xFF3A9D5D)),
       'loss' => ('Défaite', const Color(0xFFCA3431)),
       'draw' => ('Nulle', const Color(0xFF9E9E9E)),
-      _ => ('En cours', AppTheme.accent),
+      _ when game.isOngoing => ('En cours', AppTheme.accent),
+      _ => switch (game.result) {
+          'WHITE_WIN' => ('1-0', const Color(0xFF9E9E9E)),
+          'BLACK_WIN' => ('0-1', const Color(0xFF9E9E9E)),
+          'DRAW' => ('½-½', const Color(0xFF9E9E9E)),
+          _ => ('Terminée', const Color(0xFF9E9E9E)),
+        },
     };
 
     return Card(
@@ -116,7 +124,9 @@ class _GameTile extends ConsumerWidget {
             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
         subtitle: Text(
           '${game.modeLabel} · ${game.timeControlLabel} · '
-          '${game.color == 'white' ? 'Blancs' : 'Noirs'} · ${game.moveCount} demi-coups\n'
+          // Partie locale : on joue les deux camps, la couleur n'a pas de sens.
+          '${game.mode == 'LOCAL' ? '' : '${game.color == 'white' ? 'Blancs' : 'Noirs'} · '}'
+          '${game.moveCount} demi-coups\n'
           '${_formatDate(game.createdAt)}',
           style: const TextStyle(color: Colors.white54, fontSize: 12),
         ),

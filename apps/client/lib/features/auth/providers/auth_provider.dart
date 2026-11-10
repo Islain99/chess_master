@@ -43,10 +43,15 @@ final pushServiceProvider = Provider<PushService>((ref) => PushService());
 /// Provider d'un ApiClient sans token (pour les appels auth).
 final rawApiClientProvider = Provider<ApiClient>((ref) => ApiClient());
 
-/// Provider d'un ApiClient avec token injecté depuis l'état d'auth.
+/// Provider d'un ApiClient qui envoie le jeton courant de la session.
+///
+/// Le provider surveille toujours l'état d'auth : les écrans qui en dépendent
+/// (Mes parties, Profil…) se rechargent à la connexion / déconnexion. Mais le
+/// jeton est lu à chaque requête ([ApiClient.session]) : un notifier qui a
+/// gardé une ancienne instance envoie quand même le jeton à jour.
 final apiClientProvider = Provider<ApiClient>((ref) {
-  final authState = ref.watch(authProvider).valueOrNull;
-  return ApiClient(accessToken: authState?.tokens?.accessToken);
+  ref.watch(authProvider.select((s) => s.valueOrNull?.user?.id));
+  return ApiClient.session();
 });
 
 // ─── Notifier ─────────────────────────────────────────────────────────────────
@@ -59,6 +64,35 @@ class AuthNotifier extends StateNotifier<AsyncValue<AuthState>> {
   final ApiClient _api;
   final OAuthService? _oauth;
   final PushService? _push;
+
+  /// Renouvelle le jeton d'accès (15 min) une minute avant son expiration.
+  /// Avant, il n'était renouvelé qu'à l'ouverture de l'application : au bout
+  /// de 15 minutes, l'utilisateur apparaissait déconnecté (« Mes parties »
+  /// disparaissait de l'accueil) et ses parties devenaient anonymes.
+  Timer? _refreshTimer;
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  void _scheduleRefresh(AuthTokens tokens) {
+    _refreshTimer?.cancel();
+    // expiresAt est déjà avancé d'une minute ; on renouvelle encore une
+    // minute plus tôt pour que isLoggedIn ne bascule jamais à false.
+    final delay = tokens.expiresAt.difference(DateTime.now()) - const Duration(minutes: 1);
+    _refreshTimer = Timer(
+      delay.isNegative ? Duration.zero : delay,
+      () => _silentRefresh(tokens.refreshToken),
+    );
+  }
+
+  void _setSession(AuthState session) {
+    if (!mounted) return;
+    SessionToken.current = session.tokens?.accessToken;
+    state = AsyncValue.data(session);
+  }
 
   // ─── Restauration de session ───────────────────────────────────────────────
 
@@ -90,11 +124,12 @@ class AuthNotifier extends StateNotifier<AsyncValue<AuthState>> {
       final authedApi = ApiClient(accessToken: accessToken);
       final userData = await authedApi.get('/auth/me');
       final user = AuthUser.fromJson(userData);
-      state = AsyncValue.data(AuthState(user: user, tokens: tokens));
+      _setSession(AuthState(user: user, tokens: tokens));
+      _scheduleRefresh(tokens);
       _registerPush(tokens);
     } catch (_) {
       await _clearStorage();
-      state = const AsyncValue.data(AuthState());
+      _setSession(const AuthState());
     }
   }
 
@@ -199,20 +234,40 @@ class AuthNotifier extends StateNotifier<AsyncValue<AuthState>> {
     // avec Google » reconnecterait silencieusement le même compte).
     await _oauth?.signOutAll();
 
+    _refreshTimer?.cancel();
     await _clearStorage();
-    state = const AsyncValue.data(AuthState());
+    _setSession(const AuthState());
   }
 
   // ─── Renouvellement silencieux ────────────────────────────────────────────
 
   Future<void> _silentRefresh(String refreshToken) async {
+    if (!mounted) return;
     try {
       final data = await _api.post('/auth/refresh', {'refreshToken': refreshToken});
+      if (!mounted) return;
       await _handleAuthResponse(data);
+    } on ApiException catch (e) {
+      if (e.statusCode == 400 || e.statusCode == 401 || e.statusCode == 403) {
+        // Jeton de renouvellement refusé (expiré, révoqué) : vraie déconnexion.
+        _refreshTimer?.cancel();
+        await _clearStorage();
+        _setSession(const AuthState());
+      } else {
+        _retryRefreshLater(refreshToken); // serveur indisponible (5xx…)
+      }
     } catch (_) {
-      await _clearStorage();
-      state = const AsyncValue.data(AuthState());
+      // Réseau coupé : on garde la session enregistrée et on réessaie,
+      // au lieu de déconnecter l'utilisateur pour une coupure passagère.
+      _retryRefreshLater(refreshToken);
     }
+  }
+
+  void _retryRefreshLater(String refreshToken) {
+    if (!mounted) return;
+    if (state.isLoading) _setSession(const AuthState());
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer(const Duration(seconds: 30), () => _silentRefresh(refreshToken));
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -231,7 +286,8 @@ class AuthNotifier extends StateNotifier<AsyncValue<AuthState>> {
     final user = AuthUser.fromJson(userData);
 
     await _saveTokens(tokens);
-    state = AsyncValue.data(AuthState(user: user, tokens: tokens));
+    _setSession(AuthState(user: user, tokens: tokens));
+    _scheduleRefresh(tokens);
     _registerPush(tokens);
   }
 

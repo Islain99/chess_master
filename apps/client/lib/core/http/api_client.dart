@@ -17,16 +17,39 @@ class ApiException implements Exception {
   String toString() => 'ApiException($statusCode): $error — $message';
 }
 
+/// Jeton d'accès de la session en cours, tenu à jour par AuthNotifier
+/// (connexion, renouvellement, déconnexion).
+///
+/// Polissage : les notifiers créés une seule fois (parties, analyse, salles)
+/// gardaient l'ApiClient — donc le jeton — du moment de leur création. Après
+/// une connexion ou un renouvellement (toutes les 15 min), ils continuaient
+/// d'appeler l'API sans jeton ou avec un jeton expiré : les parties contre
+/// l'IA n'étaient plus rattachées au compte et n'apparaissaient pas dans
+/// « Mes parties ». Un client [ApiClient.session] lit le jeton à chaque requête.
+class SessionToken {
+  SessionToken._();
+  static String? current;
+}
+
 /// Client HTTP autour du package [http].
-/// [accessToken] est transmis en header Authorization: Bearer si fourni.
+/// [accessToken] est transmis en header Authorization: Bearer si fourni ;
+/// sinon, avec [useSession], le jeton courant de la session ([SessionToken]).
 class ApiClient {
-  ApiClient({http.Client? client, this.accessToken})
+  ApiClient({http.Client? client, this.accessToken, this.useSession = false})
       : _client = client ?? http.Client();
+
+  /// Client qui suit la session : jeton lu au moment de chaque requête.
+  ApiClient.session({http.Client? client}) : this(client: client, useSession: true);
 
   final http.Client _client;
 
-  /// Token JWT d'accès à inclure dans les headers si non null.
+  /// Token JWT d'accès fixe à inclure dans les headers si non null.
   final String? accessToken;
+
+  /// Utiliser le jeton courant de la session quand [accessToken] est null.
+  final bool useSession;
+
+  String? get _token => accessToken ?? (useSession ? SessionToken.current : null);
 
   // ─── Parties ──────────────────────────────────────────────────────────────
 
@@ -153,7 +176,7 @@ class ApiClient {
   Map<String, String> _headers({String accept = 'application/json'}) => {
     'Content-Type': 'application/json',
     'Accept': accept,
-    if (accessToken != null) 'Authorization': 'Bearer $accessToken',
+    if (_token != null) 'Authorization': 'Bearer $_token',
   };
 
   Map<String, dynamic> _parseResponse(http.Response response) {

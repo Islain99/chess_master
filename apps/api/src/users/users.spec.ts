@@ -98,6 +98,14 @@ describe('toGameSummary', () => {
     expect(forBob).toMatchObject({ color: 'black', outcome: 'loss', opponent: { id: 'alice' } });
   });
 
+  it('partie locale : pas d\'issue « victoire / défaite », pas d\'adversaire', () => {
+    const local = toGameSummary(
+      { ...base, mode: 'LOCAL', result: 'BLACK_WIN', blackPlayerId: null, blackPlayer: null },
+      'alice',
+    );
+    expect(local).toMatchObject({ mode: 'LOCAL', result: 'BLACK_WIN', outcome: null, opponent: null });
+  });
+
   it('nulle, partie en cours, adversaire IA', () => {
     expect(toGameSummary({ ...base, result: 'DRAW' }, 'bob').outcome).toBe('draw');
     expect(toGameSummary({ ...base, result: null, status: 'ONGOING' }, 'bob').outcome).toBeNull();

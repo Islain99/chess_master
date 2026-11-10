@@ -91,6 +91,30 @@ void main() {
       expect(squareWidget(tester, 'e4').pieceCode, isNull);
     });
 
+    testWidgets('pièces et points de coup légal centrés dans leur case (polissage)', (tester) async {
+      await pumpBoard(tester, selected: 'e2', targets: {'e3', 'e4'});
+      void expectCentered(Finder inner, String square) {
+        final got = tester.getCenter(inner);
+        final want = tester.getCenter(squareNamed(square));
+        expect((got - want).distance, lessThan(0.5), reason: 'décalé dans $square');
+      }
+
+      // Pièce (blanc et noir)
+      expectCentered(find.descendant(of: squareNamed('e2'), matching: find.byType(ChessPieceWidget)), 'e2');
+      expectCentered(find.descendant(of: squareNamed('g8'), matching: find.byType(ChessPieceWidget)), 'g8');
+
+      // Point de coup légal (case vide) : avant, collé dans le coin supérieur gauche
+      final dot = find.descendant(
+        of: squareNamed('e4'),
+        matching: find.byWidgetPredicate((w) =>
+            w is Container &&
+            w.decoration is BoxDecoration &&
+            (w.decoration! as BoxDecoration).shape == BoxShape.circle),
+      );
+      expect(dot, findsOneWidget);
+      expectCentered(dot, 'e4');
+    });
+
     testWidgets('couleurs des cases : a1 foncée, h1 et a8 claires (sprint 20)', (tester) async {
       await pumpBoard(tester);
       expect(squareWidget(tester, 'a1').isLight, isFalse);
@@ -204,9 +228,11 @@ void main() {
 
   // ─── Promotion ─────────────────────────────────────────────────────────────
   group('PromotionDialog', () {
-    Future<String?> choose(WidgetTester tester, String color, String glyph) async {
+    Future<String?> choose(WidgetTester tester, String color, String piece) async {
       String? picked;
-      await tester.pumpWidget(MaterialApp(
+      // Polissage : les choix utilisent ChessPieceWidget (style des réglages),
+      // qui lit les Paramètres → ProviderScope requis.
+      await tester.pumpWidget(ProviderScope(child: MaterialApp(
         home: Builder(
           builder: (context) => TextButton(
             onPressed: () => showDialog<void>(
@@ -216,23 +242,24 @@ void main() {
             child: const Text('ouvrir'),
           ),
         ),
-      ));
+      )));
       await tester.tap(find.text('ouvrir'));
       await tester.pumpAndSettle();
       expect(find.text('Promotion'), findsOneWidget);
 
-      await tester.tap(find.text('$glyph\uFE0E')); // présentation texte (pas d'emoji)
+      expect(find.byType(ChessPieceWidget), findsNWidgets(4));
+      await tester.tap(find.byKey(ValueKey('promotion-$piece')));
       await tester.pumpAndSettle();
       expect(find.text('Promotion'), findsNothing); // fermé après le choix
       return picked;
     }
 
     testWidgets('blancs : dame → « q »', (tester) async {
-      expect(await choose(tester, 'w', '♕'), 'q');
+      expect(await choose(tester, 'w', 'q'), 'q');
     });
 
     testWidgets('noirs : cavalier → « n »', (tester) async {
-      expect(await choose(tester, 'b', '♞'), 'n');
+      expect(await choose(tester, 'b', 'n'), 'n');
     });
   });
 
@@ -285,6 +312,26 @@ void main() {
           'Cette adresse e-mail est déjà utilisée.');
       expect(registerErrorMessage(api(400, 'Adresse e-mail invalide.')), 'Adresse e-mail invalide.');
       expect(registerErrorMessage(api(500, 'boom')), contains('500'));
+    });
+
+    test('ApiClient.session : jeton de la session lu à chaque requête (polissage)', () async {
+      final seen = <String?>[];
+      final client = ApiClient.session(
+        client: MockClient((req) async {
+          seen.add(req.headers['Authorization']);
+          return http.Response('{}', 200);
+        }),
+      );
+      addTearDown(() => SessionToken.current = null);
+
+      SessionToken.current = null;
+      await client.get('/x');
+      SessionToken.current = 'jeton-1';
+      await client.get('/x');
+      SessionToken.current = 'jeton-2'; // renouvellement : même instance, nouveau jeton
+      await client.get('/x');
+
+      expect(seen, [null, 'Bearer jeton-1', 'Bearer jeton-2']);
     });
 
     test('ApiClient : liste de messages de validation jointe ligne par ligne', () async {

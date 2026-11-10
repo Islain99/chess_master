@@ -89,19 +89,15 @@ class HomeScreen extends ConsumerWidget {
                       ),
                     ),
                   ]),
-                // Bouton paramètres
+                // Bouton paramètres (polissage : il était présent en double)
                 IconButton(
+                  tooltip: 'Paramètres',
                   icon: const Icon(Icons.settings_outlined, color: Colors.white54, size: 22),
                   onPressed: () => Navigator.push(context,
                       MaterialPageRoute<void>(builder: (_) => const SettingsScreen())),
                 ),
-              // Profil / connexion
-                IconButton(
-                  icon: const Icon(Icons.settings_outlined, color: Colors.white54, size: 20),
-                  onPressed: () => Navigator.push(context,
-                      MaterialPageRoute<void>(builder: (_) => const SettingsScreen())),
-                ),
                 const Gap(4),
+                // Profil / connexion
                 if (auth?.isLoggedIn ?? false)
                   _UserAvatar(
                     user: auth!.user!,

@@ -12,6 +12,7 @@ class GameSummary {
     required this.moveCount,
     required this.createdAt,
     this.outcome,
+    this.result,
     this.resultReason,
     this.opponentName,
     this.opponentAvatarUrl,
@@ -28,6 +29,10 @@ class GameSummary {
 
   /// win, loss, draw — null tant que la partie n'est pas terminée.
   final String? outcome;
+
+  /// Résultat brut : WHITE_WIN, BLACK_WIN, DRAW (null si en cours).
+  /// Sert aux parties locales, qui n'ont pas d'issue « pour le joueur ».
+  final String? result;
   final String? resultReason;
   final String? opponentName;
   final String? opponentAvatarUrl;
@@ -70,6 +75,7 @@ class GameSummary {
       status: json['status'] as String? ?? 'FINISHED',
       color: json['color'] as String? ?? 'white',
       outcome: json['outcome'] as String?,
+      result: json['result'] as String?,
       resultReason: json['resultReason'] as String?,
       opponentName: isUser ? opponent!['displayName'] as String? : null,
       opponentAvatarUrl: isUser ? opponent!['avatarUrl'] as String? : null,
