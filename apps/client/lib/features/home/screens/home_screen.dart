@@ -18,6 +18,7 @@ import '../../matchmaking/screens/matchmaking_screen.dart';
 import '../../multiplayer/screens/lobby_screen.dart';
 import '../../notifications/providers/notifications_provider.dart';
 import '../../notifications/screens/notifications_screen.dart';
+import '../../notifications/widgets/push_prompt_card.dart';
 import '../../settings/screens/settings_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -120,6 +121,9 @@ class HomeScreen extends ConsumerWidget {
                 _WelcomeCard(user: auth!.user!, onTap: () => _openProfile(context)),
                 const Gap(16),
               ],
+
+              // ─── Notifications / installation sur iPhone (novembre 2026) ─
+              const PushPromptCard(dismissible: true),
 
               // ─── Reprendre (sprint 18) ───────────────────────────────────
               const _ResumeCard(),

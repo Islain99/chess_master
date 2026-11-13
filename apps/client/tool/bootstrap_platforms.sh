@@ -100,4 +100,21 @@ if [[ -d web && -f web_push/dist/firebase-messaging-sw.js ]]; then
   echo "  ✓ web/push/firebase-messaging-sw.js"
 fi
 
+# Novembre 2026 : identité de l'app Web (icônes, manifeste, titre). Sur
+# iPhone, c'est ce qui s'affiche quand on ajoute le site à l'écran d'accueil.
+if [[ -d web && -d web_overrides ]]; then
+  cp -R web_overrides/. web/
+  if [[ -f web/index.html ]]; then
+    perl -0pi -e '
+      s#<html>#<html lang="fr">#;
+      s#<title>[^<]*</title>#<title>Chess master</title>#;
+      s#(name="apple-mobile-web-app-title" content=")[^"]*#${1}Chess master#;
+      s#(name="description" content=")[^"]*#${1}Jouer aux échecs contre l\x27IA, en local ou en ligne.#;
+      s#(rel="apple-touch-icon" href=")[^"]*#${1}icons/apple-touch-icon.png#;
+      s#(\s*)(<link rel="manifest")#$1<meta name="theme-color" content="\#1A1A2E">$1$2# unless /name="theme-color"/;
+    ' web/index.html
+  fi
+  echo "  ✓ web/ : icônes, manifeste et titre Chess master"
+fi
+
 echo "✔ Plateformes prêtes. Étape suivante : flutter pub get && flutter run -d <device>"

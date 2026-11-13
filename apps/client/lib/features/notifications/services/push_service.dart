@@ -67,6 +67,20 @@ class PushEvent {
       );
 }
 
+/// État des notifications push sur cet appareil (novembre 2026).
+enum PushPermission {
+  /// Firebase non configuré à la compilation, ou plateforme sans push.
+  unavailable,
+
+  /// Navigateur sans Push API. Sur iPhone : Safari hors écran d'accueil.
+  unsupported,
+
+  /// Jamais demandé : il faut un geste de l'utilisateur (bouton).
+  notDetermined,
+  granted,
+  denied,
+}
+
 class PushService {
   PushService({
     TargetPlatform? platform,
@@ -124,6 +138,28 @@ class PushService {
     } catch (e) {
       debugPrint('[push] Firebase indisponible : $e');
       return false;
+    }
+  }
+
+  // ─── État de l'autorisation (sans la demander) ──────────────────────────────
+
+  /// Sur iPhone, Safari n'accepte la demande d'autorisation qu'en réponse à
+  /// un geste de l'utilisateur, et seulement pour un site ajouté à l'écran
+  /// d'accueil : l'abonnement automatique à la connexion n'y aboutit pas.
+  /// L'interface utilise cet état pour afficher le bouton « Activer » ou les
+  /// instructions d'installation.
+  Future<PushPermission> permission() async {
+    if (!isAvailable) return PushPermission.unavailable;
+    if (!await _ensureReady()) return PushPermission.unsupported;
+    try {
+      final settings = await FirebaseMessaging.instance.getNotificationSettings();
+      return switch (settings.authorizationStatus) {
+        AuthorizationStatus.authorized || AuthorizationStatus.provisional => PushPermission.granted,
+        AuthorizationStatus.denied => PushPermission.denied,
+        _ => PushPermission.notDetermined,
+      };
+    } catch (_) {
+      return PushPermission.unsupported;
     }
   }
 

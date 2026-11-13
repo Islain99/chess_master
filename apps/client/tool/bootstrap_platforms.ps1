@@ -99,4 +99,24 @@ if ((Test-Path 'web' -PathType Container) -and (Test-Path 'web_push/dist/firebas
   Write-Host '  ✓ web/push/firebase-messaging-sw.js'
 }
 
+# Novembre 2026 : identité de l'app Web (icônes, manifeste, titre). Sur
+# iPhone, c'est ce qui s'affiche quand on ajoute le site à l'écran d'accueil.
+if ((Test-Path 'web' -PathType Container) -and (Test-Path 'web_overrides' -PathType Container)) {
+  Copy-Item 'web_overrides\*' 'web' -Recurse -Force
+  if (Test-Path 'web/index.html') {
+    $path = (Resolve-Path 'web/index.html').Path
+    $html = [IO.File]::ReadAllText($path)
+    $html = $html.Replace('<html>', '<html lang="fr">')
+    $html = [regex]::Replace($html, '<title>[^<]*</title>', '<title>Chess master</title>')
+    $html = [regex]::Replace($html, '(name="apple-mobile-web-app-title" content=")[^"]*', '${1}Chess master')
+    $html = [regex]::Replace($html, '(name="description" content=")[^"]*', "`${1}Jouer aux échecs contre l'IA, en local ou en ligne.")
+    $html = [regex]::Replace($html, '(rel="apple-touch-icon" href=")[^"]*', '${1}icons/apple-touch-icon.png')
+    if (-not $html.Contains('name="theme-color"')) {
+      $html = $html.Replace('<link rel="manifest"', "<meta name=`"theme-color`" content=`"#1A1A2E`">`n  <link rel=`"manifest`"")
+    }
+    [IO.File]::WriteAllText($path, $html, (New-Object Text.UTF8Encoding $false))
+  }
+  Write-Host '  ✓ web/ : icônes, manifeste et titre Chess master'
+}
+
 Write-Host '✔ Plateformes prêtes. Étape suivante : flutter pub get ; flutter run -d windows'

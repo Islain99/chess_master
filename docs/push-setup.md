@@ -89,6 +89,8 @@ Le service worker Firebase est servi depuis `/push/firebase-messaging-sw.js`. Sa
   cd apps/client/web_push && npm ci && npm run build   # → dist/firebase-messaging-sw.js
   ```
 - Le Web Push exige **HTTPS**, sauf sur `localhost`.
+- **iPhone / iPad** (iOS 16.4+) : le push ne fonctionne que pour le site ajouté à l'écran d'accueil, et la demande d'autorisation doit venir d'un geste de l'utilisateur. La demande automatique à la connexion n'y aboutit donc pas : la carte `PushPromptCard` (accueil et écran Notifications) affiche le bouton **Activer**, ou les instructions d'installation quand Safari n'expose pas la Push API.
+- Icônes, nom et couleurs de l'app installée : `web_overrides/` (manifeste, icônes, favicon), recopié dans `web/` par `tool/bootstrap_platforms.*`, qui adapte aussi le titre de `web/index.html`.
 
 ## 4. Vérification rapide
 

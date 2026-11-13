@@ -20,6 +20,19 @@ Chess Platform est un jeu d'échecs disponible sur le **Web**, **Android**, **iO
 
 En bas de l'écran : **Mes parties**, **Classement**, **Notifications**, et l'accès au **profil** et aux **paramètres**. Si une partie locale ou contre l'IA a été interrompue, la carte **Reprendre la partie** apparaît.
 
+### Installer sur iPhone ou iPad
+
+Il n'y a pas encore d'application dans l'App Store : Chess master s'installe depuis Safari et fonctionne ensuite comme une application.
+
+1. Ouvrez le site dans **Safari**.
+2. Touchez **Partager** (le carré avec une flèche vers le haut), puis **Sur l'écran d'accueil**.
+3. Ouvrez Chess master depuis sa nouvelle icône : il s'affiche en plein écran.
+4. Connectez-vous, puis touchez **Activer** sur la carte « Être prévenu quand c'est votre tour ».
+
+Les notifications demandent iOS 16.4 ou plus récent et ne fonctionnent que depuis l'icône de l'écran d'accueil, pas dans un onglet Safari.
+
+Sur Android, utilisez l'application (APK) ; sur ordinateur, le site suffit.
+
 ### Créer un compte
 
 Un compte permet de jouer des parties classées, de garder son historique et de recevoir des notifications.
@@ -181,7 +194,7 @@ L'application vous prévient quand :
 - une partie en ligne **se termine** ;
 - un **adversaire rejoint votre salle privée**.
 
-Elles apparaissent dans **Notifications** (badge du nombre de non-lues, **Tout lire**) et, si vous l'autorisez, en **notification push** sur Android, iOS, macOS et le Web — même application fermée. Toucher une notification (dans la liste ou en push) ouvre la partie concernée : la partie en cours, ou le lecteur si elle est terminée.
+Elles apparaissent dans **Notifications** (badge du nombre de non-lues, **Tout lire**) et, si vous les activez (bouton **Activer** de l'accueil ou de l'écran Notifications), en **notification push** sur Android, iOS, macOS et le Web — même application fermée. Toucher une notification (dans la liste ou en push) ouvre la partie concernée : la partie en cours, ou le lecteur si elle est terminée.
 
 ---
 

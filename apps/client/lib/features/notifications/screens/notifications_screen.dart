@@ -4,6 +4,7 @@ import 'package:gap/gap.dart';
 import '../../../core/theme/app_theme.dart';
 import '../providers/notifications_provider.dart';
 import '../services/open_game.dart';
+import '../widgets/push_prompt_card.dart';
 
 class NotificationsScreen extends ConsumerWidget {
   const NotificationsScreen({super.key});
@@ -33,7 +34,13 @@ class NotificationsScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: state.isLoading
+      body: Column(children: [
+        // Novembre 2026 : activer le push / installer sur iPhone.
+        const Padding(
+          padding: EdgeInsets.fromLTRB(12, 12, 12, 0),
+          child: PushPromptCard(),
+        ),
+        Expanded(child: state.isLoading
           ? const Center(child: CircularProgressIndicator())
           : state.items.isEmpty
               ? _buildEmpty()
@@ -59,7 +66,8 @@ class NotificationsScreen extends ConsumerWidget {
                       },
                     );
                   },
-                ),
+                )),
+      ]),
     );
   }
 
