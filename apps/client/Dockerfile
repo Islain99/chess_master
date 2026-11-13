@@ -33,9 +33,34 @@ RUN bash tool/bootstrap_platforms.sh web
 ARG API_URL=http://localhost:3000/api/v1
 ARG WS_URL=http://localhost:3000
 
+# Novembre 2026 : identifiants PUBLICS de connexion et de push (vides =
+# bouton / push désactivés). Avant, seules les URL étaient transmises : les
+# boutons Google / Facebook et le push Web restaient inactifs en production.
+ARG GOOGLE_CLIENT_ID=
+ARG FACEBOOK_APP_ID=
+ARG FIREBASE_API_KEY=
+ARG FIREBASE_APP_ID=
+ARG FIREBASE_MESSAGING_SENDER_ID=
+ARG FIREBASE_PROJECT_ID=
+ARG FIREBASE_VAPID_KEY=
+
 RUN flutter build web --release \
       --dart-define=API_URL=${API_URL} \
-      --dart-define=WS_URL=${WS_URL}
+      --dart-define=WS_URL=${WS_URL} \
+      --dart-define=GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID} \
+      --dart-define=FACEBOOK_APP_ID=${FACEBOOK_APP_ID} \
+      --dart-define=FIREBASE_API_KEY=${FIREBASE_API_KEY} \
+      --dart-define=FIREBASE_APP_ID=${FIREBASE_APP_ID} \
+      --dart-define=FIREBASE_MESSAGING_SENDER_ID=${FIREBASE_MESSAGING_SENDER_ID} \
+      --dart-define=FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID} \
+      --dart-define=FIREBASE_VAPID_KEY=${FIREBASE_VAPID_KEY}
+
+# Pages statiques (politique de confidentialité, exigée par Google et
+# Facebook) : adresse de contact insérée à la compilation.
+ARG CONTACT_EMAIL=contact@example.com
+RUN mkdir -p build/web && for f in web_static/*.html; do \
+      sed "s|__CONTACT_EMAIL__|${CONTACT_EMAIL}|g" "$f" > "build/web/$(basename "$f")"; \
+    done
 
 # ─── Étape 2 : runtime Nginx ─────────────────────────────────────────────────
 FROM nginxinc/nginx-unprivileged:1.27-alpine AS runtime

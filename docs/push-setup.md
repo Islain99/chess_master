@@ -95,6 +95,6 @@ Le service worker Firebase est servi depuis `/push/firebase-messaging-sw.js`. Sa
 1. Se connecter dans l'application et accepter les notifications.
 2. Ouvrir une partie en ligne sur un second appareil, puis **fermer** l'application sur le premier.
 3. Jouer un coup sur le second appareil : le premier reçoit « À vous de jouer ♟ ».
-4. Toucher la notification : l'application s'ouvre sur l'écran *Notifications*.
+4. Toucher la notification : l'application s'ouvre sur la partie concernée.
 
 En cas d'échec, les journaux de l'API (`FcmService` / `PushService`) donnent le code d'erreur FCM.

@@ -73,7 +73,7 @@ Apple ne transmet le nom de l'utilisateur **qu'à la première connexion**. L'ap
 
 1. Créer une application de type *Consumer* et ajouter le produit **Facebook Login**.
 2. Récupérer l'**App ID**, l'**App Secret** (API seulement) et le **Client Token** (*Paramètres > Avancé*).
-3. **Android** :
+3. **Android** (`tool/build_android.sh` fait les deux modifications ci-dessous automatiquement à partir de `config/android.json`) :
    - Dans *Paramètres > De base > Android*, renseigner le package et le *key hash* de la clé de signature.
    - Dans `android/app/src/main/res/values/strings.xml` :
      ```xml

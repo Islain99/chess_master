@@ -102,6 +102,106 @@ voir l'en-tête de `scripts/backup-db.sh`.
 Ces fichiers restent sur le même serveur. Pour une vraie protection, active
 aussi les Backups du Droplet ou copie `~/backups` ailleurs.
 
+## Domaine, connexions et notifications
+
+À faire dans cet ordre : Google, Facebook et Firebase demandent l'adresse
+définitive du site. Les identifiants à copier sont **publics**, sauf l'App
+Secret Facebook et le compte de service Firebase, qui ne vont que dans le
+`.env` du serveur.
+
+### 1. Nom de domaine
+
+1. Acheter un domaine chez un registraire (Cloudflare, Porkbun, Namecheap… ;
+   environ 15 $/an pour un `.com` ou un `.ca`).
+2. Dans sa zone DNS, créer un enregistrement **A** : nom `@` (ou `chess` pour
+   `chess.mondomaine.com`) → IP du Droplet. Si le registraire propose un
+   « proxy » (nuage orange chez Cloudflare), le désactiver : Caddy doit
+   obtenir le certificat lui-même.
+3. Vérifier depuis ton PC : `nslookup mondomaine.com` doit afficher l'IP.
+4. Sur le serveur : remplacer `DOMAIN=` dans `infra/prod/.env`, puis
+   `bash scripts/deploy.sh`. Les comptes et parties sont conservés ; l'ancienne
+   adresse sslip.io cesse de fonctionner.
+
+Politique de confidentialité (exigée par Google et Facebook) :
+`https://DOMAIN/confidentialite.html`. L'adresse de contact affichée est
+`CONTACT_EMAIL` (sinon `ACME_EMAIL`) du `.env`.
+
+### 2. Connexion Google
+
+Sur [console.cloud.google.com](https://console.cloud.google.com) :
+
+1. Créer un projet (ex. « Chess master »).
+2. *Google Auth Platform* (écran de consentement) : application **Externe**,
+   nom, courriel d'assistance, **domaine autorisé** = ton domaine, lien de la
+   politique de confidentialité ci-dessus. Champs d'application : `openid`,
+   `email`, `profile` uniquement (aucune vérification Google requise).
+   Publier l'application (*En production*).
+3. *Clients* → **Créer un client** :
+   - type **Application Web** : origine JavaScript autorisée `https://DOMAIN` ;
+   - type **Android** : package `com.islain99.chess_client` et empreinte SHA-1
+     affichée par `tool/build_android.sh` (§ 5).
+4. `.env` du serveur : `GOOGLE_WEB_CLIENT_ID` et `GOOGLE_CLIENT_IDS` = l'ID du
+   client **Web**. `config/android.json` : `GOOGLE_SERVER_CLIENT_ID` = ce même ID.
+
+### 3. Connexion Facebook
+
+Sur [developers.facebook.com](https://developers.facebook.com) :
+
+1. *Créer une app*, cas d'usage « S'authentifier avec Facebook Login ».
+2. *Paramètres > De base* : domaine de l'app = ton domaine ; URL de la
+   politique de confidentialité ; URL des **instructions de suppression des
+   données** = `https://DOMAIN/confidentialite.html#suppression` ;
+   plateforme **Site Web** (`https://DOMAIN/`) ; plateforme **Android** : package
+   `com.islain99.chess_client`, classe `com.islain99.chess_client.MainActivity`,
+   *key hash* affiché par `tool/build_android.sh`.
+3. *Facebook Login > Paramètres* : ajouter `https://DOMAIN` aux domaines
+   autorisés pour le SDK JavaScript.
+4. Passer l'app en mode **Live** (en mode développement, seuls les comptes
+   déclarés comme testeurs peuvent se connecter).
+5. `.env` du serveur : `FACEBOOK_APP_ID` et `FACEBOOK_APP_SECRET`.
+   `config/android.json` : `FACEBOOK_APP_ID` et `FACEBOOK_CLIENT_TOKEN`
+   (*Paramètres > Avancé > Jeton client*).
+
+### 4. Notifications push (Firebase)
+
+Sur [console.firebase.google.com](https://console.firebase.google.com) :
+
+1. *Ajouter un projet* : choisir le projet Google Cloud créé au § 2.
+2. Ajouter une application **Web** : copier `apiKey`, `appId`,
+   `messagingSenderId`, `projectId` dans le `.env` (`FIREBASE_API_KEY`,
+   `FIREBASE_WEB_APP_ID`, `FIREBASE_MESSAGING_SENDER_ID`, `FIREBASE_PROJECT_ID`).
+3. *Paramètres du projet > Cloud Messaging > Certificats Web Push* : générer
+   une paire de clés → `FIREBASE_VAPID_KEY`.
+4. *Paramètres du projet > Comptes de service* : *Générer une clé privée*
+   (fichier JSON, **secret**). Sur ton PC : `base64 -w0 fichier.json` (Git Bash)
+   → `FCM_SERVICE_ACCOUNT`. Supprime ensuite le fichier JSON.
+5. Ajouter une application **Android** (package `com.islain99.chess_client`) :
+   son `appId` va dans `config/android.json` (`FIREBASE_APP_ID`), avec les
+   trois autres valeurs du § 2.
+
+Après les §§ 2 à 4 : `bash scripts/deploy.sh` sur le serveur (le client Web
+est recompilé avec les nouveaux identifiants).
+
+### 5. Application Android (APK)
+
+Sur ton PC (Flutter et Android Studio installés), dans `apps/client` :
+
+```bash
+cp config/android.example.json config/android.json   # puis le remplir
+bash tool/build_android.sh
+```
+
+Le script prépare le projet Android (configuration Facebook comprise),
+compile `build/app/outputs/flutter-apk/app-release.apk` et affiche l'empreinte
+**SHA-1** (Google, § 2) et le **key hash** (Facebook, § 3). Si `keytool`
+n'est pas trouvé, il est dans le dossier `jbr/bin` d'Android Studio.
+
+L'APK est signé avec la clé de débogage de ton PC
+(`~/.android/debug.keystore`) : compile toujours sur ce PC et sauvegarde ce
+fichier, sinon les mises à jour ne s'installeront pas par-dessus l'ancienne
+version. Pour l'installer, envoie l'APK sur le téléphone et autorise
+l'installation d'applications de source inconnue.
+
 ## Compte administrateur (anti-triche)
 
 Les signalements anti-triche (`/admin/cheat-reports`, voir

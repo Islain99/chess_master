@@ -166,3 +166,7 @@ xcuserdata/
 # (`npm ci` en CI et dans les Dockerfiles).
 !apps/api/package-lock.json
 !apps/ai-engine/package-lock.json
+
+# Novembre 2026 — configuration de compilation Android (identifiants réels)
+apps/client/config/*.json
+!apps/client/config/*.example.json

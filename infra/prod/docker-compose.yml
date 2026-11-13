@@ -156,6 +156,15 @@ services:
         # Même origine que la page : pas de CORS, pas de contenu mixte.
         API_URL: https://${DOMAIN}/api/v1
         WS_URL: https://${DOMAIN}
+        # Identifiants publics (voir .env.example ; vides = désactivés)
+        GOOGLE_CLIENT_ID: ${GOOGLE_WEB_CLIENT_ID:-}
+        FACEBOOK_APP_ID: ${FACEBOOK_APP_ID:-}
+        FIREBASE_API_KEY: ${FIREBASE_API_KEY:-}
+        FIREBASE_APP_ID: ${FIREBASE_WEB_APP_ID:-}
+        FIREBASE_MESSAGING_SENDER_ID: ${FIREBASE_MESSAGING_SENDER_ID:-}
+        FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+        FIREBASE_VAPID_KEY: ${FIREBASE_VAPID_KEY:-}
+        CONTACT_EMAIL: ${CONTACT_EMAIL:-${ACME_EMAIL}}
     restart: unless-stopped
     logging: *logging
 
