@@ -125,6 +125,16 @@ class OAuthService {
   /// Sur le Web, Google n'autorise que son propre bouton (voir GoogleWebButton).
   bool get usesGoogleWebButton => _isWeb && _supportsGoogle;
 
+  /// Web : lance TOUT DE SUITE l'initialisation de Google Sign-In.
+  ///
+  /// Novembre 2026 : le plugin Web lève une StateError si son bouton est
+  /// dessiné avant l'appel de `initialize()`. L'initialisation n'était
+  /// déclenchée que par [googleWebCredentials], un générateur `async*` qui ne
+  /// démarre qu'APRÈS le premier affichage : le bouton plantait, et Flutter
+  /// (en production) remplaçait tout le bloc OAuth par un espace vide — ni
+  /// Google ni Facebook n'apparaissaient. Le bouton attend désormais ce Future.
+  Future<void> prepareGoogleWeb() => _ensureGoogle();
+
   // ─── Point d'entrée ────────────────────────────────────────────────────────
 
   /// Lance la connexion. Renvoie `null` si l'utilisateur annule.

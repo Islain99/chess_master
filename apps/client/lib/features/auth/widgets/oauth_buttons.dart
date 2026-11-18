@@ -33,6 +33,9 @@ class _OAuthButtonsState extends ConsumerState<OAuthButtons> {
   OAuthProvider? _pending;
   StreamSubscription<OAuthCredential>? _googleWebSub;
 
+  /// Web : initialisation de Google, à attendre avant de dessiner son bouton.
+  Future<void>? _googleReady;
+
   OAuthService get _oauth => ref.read(oauthServiceProvider);
 
   @override
@@ -40,6 +43,8 @@ class _OAuthButtonsState extends ConsumerState<OAuthButtons> {
     super.initState();
     // Web : le bouton Google officiel publie ses jetons sur un flux.
     if (_oauth.usesGoogleWebButton) {
+      // Appel synchrone de initialize(), AVANT le premier build.
+      _googleReady = _oauth.prepareGoogleWeb();
       _googleWebSub = _oauth.googleWebCredentials().listen(
             _exchange,
             onError: (Object e) => widget.onError(_messageFor(e, OAuthProvider.google)),
@@ -64,7 +69,7 @@ class _OAuthButtonsState extends ConsumerState<OAuthButtons> {
         const _OrDivider(),
         for (final provider in providers) ...[
           if (provider == OAuthProvider.google && _oauth.usesGoogleWebButton)
-            Center(child: buildGoogleWebButton())
+            Center(child: _GoogleWebButton(ready: _googleReady!))
           else
             _ProviderButton(
               provider: provider,
@@ -184,6 +189,38 @@ class _ProviderButton extends StatelessWidget {
                 ],
               ),
       ),
+    );
+  }
+}
+
+/// Bouton Google officiel (Web), dessiné seulement une fois le plugin prêt.
+/// Si l'initialisation échoue (client ID refusé, script Google bloqué), un
+/// message remplace le bouton : les autres fournisseurs restent affichés.
+class _GoogleWebButton extends StatelessWidget {
+  const _GoogleWebButton({required this.ready});
+  final Future<void> ready;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<void>(
+      future: ready,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const SizedBox(
+            height: 44,
+            child: Center(
+              child: SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+            ),
+          );
+        }
+        if (snapshot.hasError) {
+          return const Text(
+            'Connexion Google indisponible pour le moment.',
+            style: TextStyle(color: Colors.white54, fontSize: 13),
+          );
+        }
+        return buildGoogleWebButton();
+      },
     );
   }
 }
